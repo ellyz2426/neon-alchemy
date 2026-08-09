@@ -1,0 +1,84 @@
+<style>
+  .root {
+    flex-direction: column;
+    padding: 20;
+    gap: 10;
+    background-color: rgba(10, 5, 25, 0.94);
+    border-radius: 14;
+    border-color: rgba(180, 100, 255, 0.4);
+    border-width: 2;
+    width: 340;
+  }
+  .header {
+    font-size: 22;
+    color: #d4a0ff;
+    margin-bottom: 8;
+    align-items: center;
+  }
+  .recipe-row {
+    flex-direction: row;
+    align-items: center;
+    gap: 8;
+    padding: 8;
+    background-color: rgba(120, 60, 200, 0.12);
+    border-radius: 6;
+  }
+  .recipe-dot {
+    width: 14;
+    height: 14;
+    border-radius: 7;
+    background-color: #ff4444;
+  }
+  .recipe-name {
+    font-size: 15;
+    color: #e0c0ff;
+    width: 100;
+  }
+  .recipe-ingredients {
+    font-size: 12;
+    color: rgba(200, 180, 255, 0.6);
+  }
+  .close-btn {
+    padding: 10;
+    background-color: rgba(120, 60, 200, 0.25);
+    border-radius: 6;
+    align-items: center;
+    cursor: pointer;
+    margin-top: 8;
+  }
+  .close-text {
+    font-size: 14;
+    color: #e0c0ff;
+  }
+</style>
+<Panel class="root">
+  <div class="header">RECIPE BOOK</div>
+  <div class="recipe-row" id="recipe-0">
+    <div class="recipe-dot" id="rdot-0"></div>
+    <div class="recipe-name" id="rname-0">Health</div>
+    <div class="recipe-ingredients" id="ringr-0">Herb + Crystal</div>
+  </div>
+  <div class="recipe-row" id="recipe-1">
+    <div class="recipe-dot" id="rdot-1"></div>
+    <div class="recipe-name" id="rname-1">Mana</div>
+    <div class="recipe-ingredients" id="ringr-1">Crystal + Essence</div>
+  </div>
+  <div class="recipe-row" id="recipe-2">
+    <div class="recipe-dot" id="rdot-2"></div>
+    <div class="recipe-name" id="rname-2">Speed</div>
+    <div class="recipe-ingredients" id="ringr-2">Herb + Mushroom</div>
+  </div>
+  <div class="recipe-row" id="recipe-3">
+    <div class="recipe-dot" id="rdot-3"></div>
+    <div class="recipe-name" id="rname-3">Shield</div>
+    <div class="recipe-ingredients" id="ringr-3">Crystal + Scale</div>
+  </div>
+  <div class="recipe-row" id="recipe-4">
+    <div class="recipe-dot" id="rdot-4"></div>
+    <div class="recipe-name" id="rname-4">Poison</div>
+    <div class="recipe-ingredients" id="ringr-4">Mushroom + Fang</div>
+  </div>
+  <div class="close-btn" id="btn-close">
+    <div class="close-text">CLOSE</div>
+  </div>
+</Panel>

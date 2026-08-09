@@ -1,0 +1,565 @@
+import {
+	createSystem,
+	World,
+	Object3D,
+	Mesh,
+	MeshStandardMaterial,
+	BoxGeometry,
+	CylinderGeometry,
+	SphereGeometry,
+	PointLight,
+	Color,
+	MathUtils,
+	Group,
+	RingGeometry,
+	TorusGeometry,
+	ConeGeometry,
+	PlaneGeometry,
+	DoubleSide,
+} from '@iwsdk/core';
+import { INGREDIENTS, type Ingredient } from './game-data.js';
+
+export class EnvironmentSystem extends createSystem({}) {
+	private cauldronGroup!: Group;
+	private cauldronLiquid!: Mesh;
+	private cauldronLight!: PointLight;
+	private bubbleParticles: Mesh[] = [];
+	private steamParticles: Mesh[] = [];
+	private ingredientShelves: Map<string, { mesh: Mesh; light: PointLight; label: Object3D }> = new Map();
+	private candles: { mesh: Mesh; light: PointLight; flicker: number }[] = [];
+	private ambientParticles: Mesh[] = [];
+	private liquidColor = new Color(0x8844cc);
+	private targetLiquidColor = new Color(0x8844cc);
+	private elapsedTime = 0;
+
+	init() {
+		this.buildWorkshop();
+		this.buildCauldron();
+		this.buildIngredientShelves();
+		this.buildCandles();
+		this.buildAmbientParticles();
+	}
+
+	private buildWorkshop() {
+		const world = this.world as World;
+
+		// Floor - dark stone
+		const floor = new Mesh(
+			new PlaneGeometry(8, 8),
+			new MeshStandardMaterial({ color: 0x1a1520, roughness: 0.9 })
+		);
+		floor.rotation.x = -Math.PI / 2;
+		floor.position.set(0, 0, 0);
+		floor.receiveShadow = true;
+		world.scene.add(floor);
+
+		// Floor detail - magic circle
+		const circle = new Mesh(
+			new RingGeometry(1.2, 1.4, 32),
+			new MeshStandardMaterial({ color: 0x6633aa, emissive: 0x331166, emissiveIntensity: 0.3, side: DoubleSide })
+		);
+		circle.rotation.x = -Math.PI / 2;
+		circle.position.set(0, 0.01, -0.5);
+		world.scene.add(circle);
+
+		const innerCircle = new Mesh(
+			new RingGeometry(0.8, 0.85, 32),
+			new MeshStandardMaterial({ color: 0x8855cc, emissive: 0x442288, emissiveIntensity: 0.4, side: DoubleSide })
+		);
+		innerCircle.rotation.x = -Math.PI / 2;
+		innerCircle.position.set(0, 0.015, -0.5);
+		world.scene.add(innerCircle);
+
+		// Walls
+		const wallMat = new MeshStandardMaterial({ color: 0x2a2030, roughness: 0.85 });
+
+		// Back wall
+		const backWall = new Mesh(new BoxGeometry(8, 3.5, 0.15), wallMat);
+		backWall.position.set(0, 1.75, -3.5);
+		world.scene.add(backWall);
+
+		// Side walls
+		const leftWall = new Mesh(new BoxGeometry(0.15, 3.5, 8), wallMat);
+		leftWall.position.set(-4, 1.75, 0);
+		world.scene.add(leftWall);
+
+		const rightWall = new Mesh(new BoxGeometry(0.15, 3.5, 8), wallMat);
+		rightWall.position.set(4, 1.75, 0);
+		world.scene.add(rightWall);
+
+		// Ceiling
+		const ceiling = new Mesh(new BoxGeometry(8, 0.1, 8), new MeshStandardMaterial({ color: 0x1a1520 }));
+		ceiling.position.set(0, 3.5, 0);
+		world.scene.add(ceiling);
+
+		// Ceiling beams
+		for (let i = -3; i <= 3; i += 2) {
+			const beam = new Mesh(
+				new BoxGeometry(8, 0.12, 0.12),
+				new MeshStandardMaterial({ color: 0x3a2820, roughness: 0.9 })
+			);
+			beam.position.set(0, 3.4, i);
+			world.scene.add(beam);
+		}
+
+		// Ambient purple light
+		const ambLight = new PointLight(0x6633aa, 2, 12);
+		ambLight.position.set(0, 3.2, 0);
+		world.scene.add(ambLight);
+
+		// Workbench behind cauldron area
+		const benchTop = new Mesh(
+			new BoxGeometry(3, 0.08, 0.8),
+			new MeshStandardMaterial({ color: 0x3a2820, roughness: 0.8 })
+		);
+		benchTop.position.set(0, 0.85, -2.8);
+		world.scene.add(benchTop);
+
+		// Bench legs
+		for (const x of [-1.4, 1.4]) {
+			const leg = new Mesh(
+				new BoxGeometry(0.08, 0.85, 0.08),
+				new MeshStandardMaterial({ color: 0x2a1c14 })
+			);
+			leg.position.set(x, 0.425, -2.8);
+			world.scene.add(leg);
+		}
+
+		// Spell books on bench
+		for (let i = 0; i < 3; i++) {
+			const book = new Mesh(
+				new BoxGeometry(0.15, 0.05 + Math.random() * 0.03, 0.2),
+				new MeshStandardMaterial({ color: new Color().setHSL(Math.random() * 0.3 + 0.6, 0.5, 0.2) })
+			);
+			book.position.set(-0.8 + i * 0.5, 0.92 + i * 0.015, -2.8);
+			book.rotation.y = (Math.random() - 0.5) * 0.3;
+			world.scene.add(book);
+		}
+
+		// Hanging herb bundles
+		for (let i = 0; i < 5; i++) {
+			const bundle = new Group();
+			const stem = new Mesh(
+				new CylinderGeometry(0.01, 0.015, 0.3, 6),
+				new MeshStandardMaterial({ color: 0x446622 })
+			);
+			const leaves = new Mesh(
+				new SphereGeometry(0.06, 6, 4),
+				new MeshStandardMaterial({
+					color: new Color().setHSL(0.25 + Math.random() * 0.1, 0.6, 0.25),
+					emissive: new Color().setHSL(0.25 + Math.random() * 0.1, 0.3, 0.05),
+				})
+			);
+			leaves.position.y = -0.15;
+			leaves.scale.set(1, 1.5, 1);
+			bundle.add(stem);
+			bundle.add(leaves);
+			bundle.position.set(-2 + i * 1, 3.3, -3.3);
+			world.scene.add(bundle);
+		}
+
+		// Potion bottles on back shelf
+		const shelfBoard = new Mesh(
+			new BoxGeometry(3, 0.05, 0.2),
+			new MeshStandardMaterial({ color: 0x3a2820 })
+		);
+		shelfBoard.position.set(0, 2.2, -3.3);
+		world.scene.add(shelfBoard);
+
+		for (let i = 0; i < 6; i++) {
+			const bottleColor = new Color().setHSL(Math.random(), 0.7, 0.4);
+			const bottle = new Mesh(
+				new CylinderGeometry(0.025, 0.03, 0.12, 8),
+				new MeshStandardMaterial({
+					color: bottleColor,
+					emissive: bottleColor,
+					emissiveIntensity: 0.3,
+					transparent: true,
+					opacity: 0.7,
+				})
+			);
+			const cork = new Mesh(
+				new CylinderGeometry(0.02, 0.02, 0.025, 6),
+				new MeshStandardMaterial({ color: 0x8a6040 })
+			);
+			cork.position.y = 0.07;
+			bottle.add(cork);
+			bottle.position.set(-1.2 + i * 0.5, 2.28, -3.3);
+			world.scene.add(bottle);
+		}
+	}
+
+	private buildCauldron() {
+		const world = this.world as World;
+		this.cauldronGroup = new Group();
+		this.cauldronGroup.position.set(0, 0, -0.5);
+
+		// Cauldron body - dark iron
+		const body = new Mesh(
+			new CylinderGeometry(0.45, 0.35, 0.5, 16, 1, true),
+			new MeshStandardMaterial({ color: 0x1a1a2a, roughness: 0.6, metalness: 0.7, side: DoubleSide })
+		);
+		body.position.y = 0.55;
+		this.cauldronGroup.add(body);
+
+		// Cauldron bottom
+		const bottom = new Mesh(
+			new CylinderGeometry(0.35, 0.35, 0.03, 16),
+			new MeshStandardMaterial({ color: 0x1a1a2a, roughness: 0.6, metalness: 0.7 })
+		);
+		bottom.position.y = 0.31;
+		this.cauldronGroup.add(bottom);
+
+		// Cauldron rim
+		const rim = new Mesh(
+			new TorusGeometry(0.45, 0.025, 8, 24),
+			new MeshStandardMaterial({ color: 0x2a2a3a, metalness: 0.8, roughness: 0.4 })
+		);
+		rim.rotation.x = Math.PI / 2;
+		rim.position.y = 0.8;
+		this.cauldronGroup.add(rim);
+
+		// Rune ring around cauldron rim
+		const runeRing = new Mesh(
+			new TorusGeometry(0.46, 0.01, 6, 32),
+			new MeshStandardMaterial({ color: 0x8844cc, emissive: 0x6622aa, emissiveIntensity: 0.5 })
+		);
+		runeRing.rotation.x = Math.PI / 2;
+		runeRing.position.y = 0.78;
+		this.cauldronGroup.add(runeRing);
+
+		// Liquid surface
+		this.cauldronLiquid = new Mesh(
+			new CylinderGeometry(0.42, 0.42, 0.02, 16),
+			new MeshStandardMaterial({
+				color: 0x8844cc,
+				emissive: 0x6622aa,
+				emissiveIntensity: 0.6,
+				transparent: true,
+				opacity: 0.85,
+			})
+		);
+		this.cauldronLiquid.position.y = 0.72;
+		this.cauldronGroup.add(this.cauldronLiquid);
+
+		// Cauldron legs
+		for (let i = 0; i < 3; i++) {
+			const angle = (i / 3) * Math.PI * 2;
+			const leg = new Mesh(
+				new CylinderGeometry(0.03, 0.04, 0.3, 6),
+				new MeshStandardMaterial({ color: 0x1a1a2a, metalness: 0.7 })
+			);
+			leg.position.set(Math.cos(angle) * 0.3, 0.15, Math.sin(angle) * 0.3);
+			this.cauldronGroup.add(leg);
+		}
+
+		// Fire under cauldron
+		for (let i = 0; i < 5; i++) {
+			const flame = new Mesh(
+				new ConeGeometry(0.04 + Math.random() * 0.03, 0.15 + Math.random() * 0.1, 4),
+				new MeshStandardMaterial({
+					color: 0xff6622,
+					emissive: 0xff4400,
+					emissiveIntensity: 1,
+					transparent: true,
+					opacity: 0.7,
+				})
+			);
+			flame.position.set(
+				(Math.random() - 0.5) * 0.3,
+				0.1,
+				(Math.random() - 0.5) * 0.3
+			);
+			this.cauldronGroup.add(flame);
+		}
+
+		// Cauldron light
+		this.cauldronLight = new PointLight(0x8844cc, 3, 5);
+		this.cauldronLight.position.set(0, 1.0, 0);
+		this.cauldronGroup.add(this.cauldronLight);
+
+		world.scene.add(this.cauldronGroup);
+
+		// Pre-create bubble particles
+		for (let i = 0; i < 12; i++) {
+			const bubble = new Mesh(
+				new SphereGeometry(0.015 + Math.random() * 0.01, 6, 4),
+				new MeshStandardMaterial({
+					color: 0xaa66ff,
+					emissive: 0x8844cc,
+					emissiveIntensity: 0.8,
+					transparent: true,
+					opacity: 0.6,
+				})
+			);
+			bubble.position.set(
+				(Math.random() - 0.5) * 0.5,
+				0.72 + Math.random() * 0.2,
+				-0.5 + (Math.random() - 0.5) * 0.5
+			);
+			bubble.userData.velocity = 0.3 + Math.random() * 0.5;
+			bubble.userData.phase = Math.random() * Math.PI * 2;
+			bubble.visible = false;
+			world.scene.add(bubble);
+			this.bubbleParticles.push(bubble);
+		}
+
+		// Steam particles
+		for (let i = 0; i < 8; i++) {
+			const steam = new Mesh(
+				new SphereGeometry(0.04, 4, 4),
+				new MeshStandardMaterial({
+					color: 0xccbbdd,
+					transparent: true,
+					opacity: 0.15,
+				})
+			);
+			steam.position.set(
+				(Math.random() - 0.5) * 0.3,
+				1.0 + Math.random() * 0.5,
+				-0.5 + (Math.random() - 0.5) * 0.3
+			);
+			steam.userData.phase = Math.random() * Math.PI * 2;
+			steam.visible = false;
+			world.scene.add(steam);
+			this.steamParticles.push(steam);
+		}
+	}
+
+	private buildIngredientShelves() {
+		const world = this.world as World;
+
+		// Ingredient shelves positioned in arc around player
+		const positions: [number, number, number, number][] = [
+			[-2.5, 1.2, -2.0, 0.4],  // herb
+			[-2.5, 1.2, -1.0, 0.3],  // crystal
+			[-2.5, 1.2, 0.0, 0.2],   // mushroom
+			[-2.5, 1.2, 1.0, 0.1],   // essence
+			[2.5, 1.2, -2.0, -0.4],  // scale
+			[2.5, 1.2, -1.0, -0.3],  // fang
+			[2.5, 1.2, 0.0, -0.2],   // feather
+			[2.5, 1.2, 1.0, -0.1],   // pearl
+		];
+
+		INGREDIENTS.forEach((ingredient, i) => {
+			const [x, y, z, rotY] = positions[i];
+
+			// Shelf bracket
+			const bracket = new Mesh(
+				new BoxGeometry(0.4, 0.04, 0.25),
+				new MeshStandardMaterial({ color: 0x3a2820, roughness: 0.85 })
+			);
+			bracket.position.set(x, y, z);
+			bracket.rotation.y = rotY;
+			world.scene.add(bracket);
+
+			// Ingredient visual (glowing orb/crystal)
+			const geo = i % 3 === 0
+				? new SphereGeometry(0.06, 8, 6)
+				: i % 3 === 1
+				? new BoxGeometry(0.08, 0.08, 0.08)
+				: new CylinderGeometry(0.02, 0.05, 0.1, 6);
+
+			const mat = new MeshStandardMaterial({
+				color: ingredient.color,
+				emissive: ingredient.glowColor,
+				emissiveIntensity: 0.6,
+				transparent: true,
+				opacity: 0.85,
+			});
+
+			const mesh = new Mesh(geo, mat);
+			mesh.position.set(x, y + 0.08, z);
+			mesh.rotation.y = rotY;
+			world.scene.add(mesh);
+
+			// Glow light
+			const light = new PointLight(ingredient.glowColor, 0.5, 1.5);
+			light.position.set(x, y + 0.12, z);
+			world.scene.add(light);
+
+			this.ingredientShelves.set(ingredient.id, { mesh, light, label: mesh });
+		});
+	}
+
+	private buildCandles() {
+		const world = this.world as World;
+		const positions: [number, number, number][] = [
+			[-1.5, 0.9, -2.8],
+			[1.5, 0.9, -2.8],
+			[-3.5, 1.8, -1.5],
+			[3.5, 1.8, -1.5],
+			[-3.5, 1.8, 0.5],
+			[3.5, 1.8, 0.5],
+		];
+
+		positions.forEach(([x, y, z]) => {
+			// Candle body
+			const candle = new Mesh(
+				new CylinderGeometry(0.02, 0.025, 0.15, 6),
+				new MeshStandardMaterial({ color: 0xeedd99 })
+			);
+			candle.position.set(x, y, z);
+			world.scene.add(candle);
+
+			// Flame
+			const flame = new Mesh(
+				new ConeGeometry(0.015, 0.04, 4),
+				new MeshStandardMaterial({
+					color: 0xffaa22,
+					emissive: 0xff8800,
+					emissiveIntensity: 1.5,
+					transparent: true,
+					opacity: 0.8,
+				})
+			);
+			flame.position.set(x, y + 0.1, z);
+			world.scene.add(flame);
+
+			// Light
+			const light = new PointLight(0xff9944, 0.8, 3);
+			light.position.set(x, y + 0.15, z);
+			world.scene.add(light);
+
+			this.candles.push({ mesh: flame, light, flicker: Math.random() * Math.PI * 2 });
+		});
+	}
+
+	private buildAmbientParticles() {
+		const world = this.world as World;
+		for (let i = 0; i < 20; i++) {
+			const particle = new Mesh(
+				new SphereGeometry(0.008, 4, 4),
+				new MeshStandardMaterial({
+					color: 0xaa88ff,
+					emissive: 0x8866cc,
+					emissiveIntensity: 0.8,
+					transparent: true,
+					opacity: 0.3,
+				})
+			);
+			particle.position.set(
+				(Math.random() - 0.5) * 6,
+				0.5 + Math.random() * 2.5,
+				(Math.random() - 0.5) * 6
+			);
+			particle.userData.phase = Math.random() * Math.PI * 2;
+			particle.userData.speed = 0.2 + Math.random() * 0.3;
+			particle.userData.baseY = particle.position.y;
+			world.scene.add(particle);
+			this.ambientParticles.push(particle);
+		}
+	}
+
+	setCauldronColor(color: number) {
+		this.targetLiquidColor.set(color);
+	}
+
+	setBubblesActive(active: boolean) {
+		this.bubbleParticles.forEach((b) => (b.visible = active));
+		this.steamParticles.forEach((s) => (s.visible = active));
+	}
+
+	highlightIngredient(id: string, highlight: boolean) {
+		const shelf = this.ingredientShelves.get(id);
+		if (shelf) {
+			shelf.light.intensity = highlight ? 2.0 : 0.5;
+			const mat = shelf.mesh.material as MeshStandardMaterial;
+			mat.emissiveIntensity = highlight ? 1.2 : 0.6;
+		}
+	}
+
+	pulseIngredient(id: string) {
+		const shelf = this.ingredientShelves.get(id);
+		if (shelf) {
+			shelf.mesh.scale.set(1.3, 1.3, 1.3);
+			shelf.light.intensity = 3.0;
+		}
+	}
+
+	getIngredientPositions(): Map<string, { x: number; y: number; z: number }> {
+		const result = new Map<string, { x: number; y: number; z: number }>();
+		this.ingredientShelves.forEach((data, id) => {
+			result.set(id, {
+				x: data.mesh.position.x,
+				y: data.mesh.position.y,
+				z: data.mesh.position.z,
+			});
+		});
+		return result;
+	}
+
+	update(delta: number, time: number) {
+		this.elapsedTime += delta;
+
+		// Animate liquid color lerp
+		this.liquidColor.lerp(this.targetLiquidColor, delta * 3);
+		const mat = this.cauldronLiquid.material as MeshStandardMaterial;
+		mat.color.copy(this.liquidColor);
+		mat.emissive.copy(this.liquidColor).multiplyScalar(0.5);
+		this.cauldronLight.color.copy(this.liquidColor);
+
+		// Liquid surface wobble
+		this.cauldronLiquid.position.y = 0.72 + Math.sin(this.elapsedTime * 2) * 0.005;
+
+		// Bubble animation
+		this.bubbleParticles.forEach((bubble) => {
+			if (!bubble.visible) return;
+			const phase = bubble.userData.phase as number;
+			const vel = bubble.userData.velocity as number;
+			bubble.position.y += vel * delta;
+			bubble.position.x = Math.sin(this.elapsedTime * 2 + phase) * 0.15;
+			const mat = bubble.material as MeshStandardMaterial;
+			mat.opacity = Math.max(0, 0.6 - (bubble.position.y - 0.72) * 1.5);
+			if (bubble.position.y > 1.2) {
+				bubble.position.y = 0.72;
+				bubble.position.x = (Math.random() - 0.5) * 0.5;
+				bubble.position.z = -0.5 + (Math.random() - 0.5) * 0.5;
+			}
+		});
+
+		// Steam animation
+		this.steamParticles.forEach((steam) => {
+			if (!steam.visible) return;
+			const phase = steam.userData.phase as number;
+			steam.position.y += 0.15 * delta;
+			steam.position.x = Math.sin(this.elapsedTime + phase) * 0.15;
+			const s = 1 + (steam.position.y - 1.0) * 0.5;
+			steam.scale.set(s, s, s);
+			const mat = steam.material as MeshStandardMaterial;
+			mat.opacity = Math.max(0, 0.15 - (steam.position.y - 1.0) * 0.08);
+			if (steam.position.y > 2.0) {
+				steam.position.y = 0.9;
+				steam.position.x = (Math.random() - 0.5) * 0.3;
+				steam.position.z = -0.5 + (Math.random() - 0.5) * 0.3;
+			}
+		});
+
+		// Candle flicker
+		this.candles.forEach((c) => {
+			c.flicker += delta * (5 + Math.random() * 3);
+			const intensity = 0.6 + Math.sin(c.flicker) * 0.2 + Math.sin(c.flicker * 3.7) * 0.1;
+			c.light.intensity = intensity;
+			c.mesh.scale.y = 0.8 + Math.sin(c.flicker * 2) * 0.3;
+		});
+
+		// Ambient particles
+		this.ambientParticles.forEach((p) => {
+			const phase = p.userData.phase as number;
+			const speed = p.userData.speed as number;
+			const baseY = p.userData.baseY as number;
+			p.position.y = baseY + Math.sin(this.elapsedTime * speed + phase) * 0.3;
+			p.position.x += Math.sin(this.elapsedTime * 0.1 + phase) * 0.001;
+			const mat = p.material as MeshStandardMaterial;
+			mat.opacity = 0.15 + Math.sin(this.elapsedTime * 0.5 + phase) * 0.15;
+		});
+
+		// Reset pulsed ingredients
+		this.ingredientShelves.forEach((data) => {
+			if (data.mesh.scale.x > 1.01) {
+				data.mesh.scale.lerp({ x: 1, y: 1, z: 1 } as any, delta * 5);
+				data.light.intensity = MathUtils.lerp(data.light.intensity, 0.5, delta * 5);
+			}
+		});
+	}
+}

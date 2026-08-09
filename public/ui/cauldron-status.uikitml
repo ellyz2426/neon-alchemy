@@ -1,0 +1,87 @@
+<style>
+  .root {
+    flex-direction: column;
+    padding: 14;
+    gap: 8;
+    background-color: rgba(10, 5, 25, 0.9);
+    border-radius: 10;
+    border-color: rgba(180, 100, 255, 0.3);
+    border-width: 1;
+    width: 220;
+  }
+  .header {
+    font-size: 14;
+    color: #d4a0ff;
+    align-items: center;
+  }
+  .ingredient-row {
+    flex-direction: row;
+    align-items: center;
+    gap: 6;
+    padding: 4;
+  }
+  .ingredient-dot {
+    width: 10;
+    height: 10;
+    border-radius: 5;
+    background-color: rgba(200, 160, 255, 0.4);
+  }
+  .ingredient-name {
+    font-size: 13;
+    color: #c0a0e0;
+  }
+  .brew-btn {
+    padding: 10;
+    background-color: rgba(100, 200, 100, 0.25);
+    border-radius: 6;
+    align-items: center;
+    cursor: pointer;
+    margin-top: 4;
+    border-color: rgba(100, 200, 100, 0.4);
+    border-width: 1;
+  }
+  .brew-text {
+    font-size: 15;
+    color: #80ff80;
+  }
+  .clear-btn {
+    padding: 8;
+    background-color: rgba(200, 60, 60, 0.2);
+    border-radius: 6;
+    align-items: center;
+    cursor: pointer;
+    border-color: rgba(200, 60, 60, 0.3);
+    border-width: 1;
+  }
+  .clear-text {
+    font-size: 12;
+    color: rgba(255, 140, 140, 0.8);
+  }
+  .status-text {
+    font-size: 12;
+    color: rgba(200, 160, 255, 0.5);
+    align-items: center;
+  }
+</style>
+<Panel class="root">
+  <div class="header">CAULDRON</div>
+  <div class="ingredient-row" id="slot-0">
+    <div class="ingredient-dot" id="sdot-0"></div>
+    <div class="ingredient-name" id="sname-0">Empty</div>
+  </div>
+  <div class="ingredient-row" id="slot-1">
+    <div class="ingredient-dot" id="sdot-1"></div>
+    <div class="ingredient-name" id="sname-1">Empty</div>
+  </div>
+  <div class="ingredient-row" id="slot-2">
+    <div class="ingredient-dot" id="sdot-2"></div>
+    <div class="ingredient-name" id="sname-2">Empty</div>
+  </div>
+  <div class="status-text" id="status">Add ingredients...</div>
+  <div class="brew-btn" id="btn-brew">
+    <div class="brew-text">BREW!</div>
+  </div>
+  <div class="clear-btn" id="btn-clear">
+    <div class="clear-text">CLEAR</div>
+  </div>
+</Panel>
