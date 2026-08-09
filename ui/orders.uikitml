@@ -1,0 +1,101 @@
+<style>
+  .root {
+    flex-direction: column;
+    padding: 16;
+    gap: 10;
+    background-color: rgba(10, 5, 25, 0.92);
+    border-radius: 12;
+    border-color: rgba(180, 100, 255, 0.35);
+    border-width: 1;
+    width: 280;
+  }
+  .header {
+    font-size: 16;
+    color: #d4a0ff;
+    margin-bottom: 4;
+    align-items: center;
+  }
+  .boss-label {
+    font-size: 14;
+    color: #ff4422;
+    align-items: center;
+    margin-bottom: 2;
+  }
+  .order-row {
+    flex-direction: column;
+    gap: 3;
+    padding: 8;
+    background-color: rgba(120, 60, 200, 0.15);
+    border-radius: 6;
+  }
+  .order-top {
+    flex-direction: row;
+    align-items: center;
+    gap: 8;
+  }
+  .potion-dot {
+    width: 16;
+    height: 16;
+    border-radius: 8;
+    background-color: #ff4444;
+  }
+  .potion-dot-blue {
+    width: 16;
+    height: 16;
+    border-radius: 8;
+    background-color: #4488ff;
+  }
+  .potion-dot-green {
+    width: 16;
+    height: 16;
+    border-radius: 8;
+    background-color: #44ff88;
+  }
+  .order-name {
+    font-size: 14;
+    color: #e0c0ff;
+  }
+  .order-timer {
+    font-size: 12;
+    color: rgba(255, 160, 100, 0.8);
+  }
+  .order-needs {
+    font-size: 10;
+    color: rgba(180, 220, 255, 0.55);
+    padding-left: 24;
+  }
+  .empty-text {
+    font-size: 13;
+    color: rgba(200, 160, 255, 0.4);
+    align-items: center;
+  }
+</style>
+<Panel class="root">
+  <div class="header">ORDERS</div>
+  <div class="boss-label" id="boss-label"></div>
+  <div class="order-row" id="order-0">
+    <div class="order-top">
+      <div class="potion-dot" id="dot-0"></div>
+      <div class="order-name" id="name-0">Health Potion</div>
+      <div class="order-timer" id="timer-0">30s</div>
+    </div>
+    <div class="order-needs" id="needs-0"></div>
+  </div>
+  <div class="order-row" id="order-1">
+    <div class="order-top">
+      <div class="potion-dot-blue" id="dot-1"></div>
+      <div class="order-name" id="name-1">Mana Potion</div>
+      <div class="order-timer" id="timer-1">25s</div>
+    </div>
+    <div class="order-needs" id="needs-1"></div>
+  </div>
+  <div class="order-row" id="order-2">
+    <div class="order-top">
+      <div class="potion-dot-green" id="dot-2"></div>
+      <div class="order-name" id="name-2">Speed Potion</div>
+      <div class="order-timer" id="timer-2">20s</div>
+    </div>
+    <div class="order-needs" id="needs-2"></div>
+  </div>
+  <div class="empty-text" id="empty-msg">No orders yet</div>
+</Panel>

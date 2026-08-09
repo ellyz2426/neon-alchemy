@@ -1,0 +1,151 @@
+<style>
+  .root {
+    flex-direction: column;
+    align-items: center;
+    padding: 24;
+    gap: 8;
+    background-color: rgba(10, 5, 25, 0.96);
+    border-radius: 16;
+    border-color: rgba(255, 80, 80, 0.4);
+    border-width: 2;
+    width: 320;
+  }
+  .title {
+    font-size: 28;
+    color: #ff6666;
+  }
+  .stat-row {
+    flex-direction: row;
+    justify-content: space-between;
+    width: 240;
+    padding: 3;
+  }
+  .stat-label {
+    font-size: 13;
+    color: rgba(200, 160, 255, 0.5);
+  }
+  .stat-val {
+    font-size: 13;
+    color: #e0c0ff;
+  }
+  .highscore-val {
+    font-size: 13;
+    color: #ffcc00;
+  }
+  .new-record {
+    font-size: 14;
+    color: #ffcc00;
+  }
+  .powerup-stat {
+    font-size: 12;
+    color: rgba(255, 200, 100, 0.7);
+  }
+  .recipe-section-header {
+    font-size: 13;
+    color: #d4a0ff;
+    margin-top: 4;
+    align-items: center;
+  }
+  .recipe-stat-row {
+    flex-direction: row;
+    justify-content: space-between;
+    width: 240;
+    padding: 1;
+  }
+  .recipe-stat-name {
+    font-size: 11;
+    color: rgba(200, 160, 255, 0.5);
+  }
+  .recipe-stat-count {
+    font-size: 11;
+    color: #e0c0ff;
+  }
+  .btn {
+    padding: 12;
+    background-color: rgba(120, 60, 200, 0.3);
+    border-radius: 8;
+    width: 200;
+    align-items: center;
+    cursor: pointer;
+    margin-top: 6;
+  }
+  .btn-text {
+    font-size: 16;
+    color: #e0c0ff;
+  }
+</style>
+<Panel class="root">
+  <div class="title">GAME OVER</div>
+  <div class="stat-row">
+    <div class="stat-label">Final Score</div>
+    <div class="stat-val" id="final-score">0</div>
+  </div>
+  <div class="stat-row">
+    <div class="stat-label">Waves Cleared</div>
+    <div class="stat-val" id="waves-cleared">0</div>
+  </div>
+  <div class="stat-row">
+    <div class="stat-label">Total Potions</div>
+    <div class="stat-val" id="total-potions">0</div>
+  </div>
+  <div class="stat-row">
+    <div class="stat-label">Power-Ups Used</div>
+    <div class="powerup-stat" id="powerups-used">0</div>
+  </div>
+  <div class="stat-row">
+    <div class="stat-label">High Score</div>
+    <div class="highscore-val" id="high-score">0</div>
+  </div>
+  <div class="new-record" id="new-record"></div>
+  <div class="recipe-section-header">BREWS BY RECIPE</div>
+  <div class="recipe-stat-row">
+    <div class="recipe-stat-name" id="rstat-name-0">Health</div>
+    <div class="recipe-stat-count" id="rstat-count-0">0</div>
+  </div>
+  <div class="recipe-stat-row">
+    <div class="recipe-stat-name" id="rstat-name-1">Mana</div>
+    <div class="recipe-stat-count" id="rstat-count-1">0</div>
+  </div>
+  <div class="recipe-stat-row">
+    <div class="recipe-stat-name" id="rstat-name-2">Speed</div>
+    <div class="recipe-stat-count" id="rstat-count-2">0</div>
+  </div>
+  <div class="recipe-stat-row">
+    <div class="recipe-stat-name" id="rstat-name-3">Shield</div>
+    <div class="recipe-stat-count" id="rstat-count-3">0</div>
+  </div>
+  <div class="recipe-stat-row">
+    <div class="recipe-stat-name" id="rstat-name-4">Poison</div>
+    <div class="recipe-stat-count" id="rstat-count-4">0</div>
+  </div>
+  <div class="recipe-stat-row">
+    <div class="recipe-stat-name" id="rstat-name-5">Phoenix</div>
+    <div class="recipe-stat-count" id="rstat-count-5">0</div>
+  </div>
+  <div class="recipe-stat-row">
+    <div class="recipe-stat-name" id="rstat-name-6">Abyss</div>
+    <div class="recipe-stat-count" id="rstat-count-6">0</div>
+  </div>
+  <div class="recipe-stat-row">
+    <div class="recipe-stat-name" id="rstat-name-7">Invisibility</div>
+    <div class="recipe-stat-count" id="rstat-count-7">0</div>
+  </div>
+  <div class="recipe-stat-row">
+    <div class="recipe-stat-name" id="rstat-name-8">Thunderbolt</div>
+    <div class="recipe-stat-count" id="rstat-count-8">0</div>
+  </div>
+  <div class="recipe-stat-row">
+    <div class="recipe-stat-name" id="rstat-name-9">Wisdom</div>
+    <div class="recipe-stat-count" id="rstat-count-9">0</div>
+  </div>
+  <div class="recipe-stat-row">
+    <div class="recipe-stat-name" id="rstat-name-10">Void Walker</div>
+    <div class="recipe-stat-count" id="rstat-count-10">0</div>
+  </div>
+  <div class="btn" id="btn-replay">
+    <div class="btn-text">PLAY AGAIN</div>
+  </div>
+  <div class="btn" id="btn-menu">
+    <div class="btn-text">MAIN MENU</div>
+  </div>
+</Panel>

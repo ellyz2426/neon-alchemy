@@ -1,0 +1,114 @@
+<style>
+  .root {
+    flex-direction: column;
+    padding: 18;
+    gap: 5;
+    background-color: rgba(10, 5, 25, 0.94);
+    border-radius: 14;
+    border-color: rgba(180, 100, 255, 0.4);
+    border-width: 2;
+    width: 360;
+  }
+  .header {
+    font-size: 22;
+    color: #d4a0ff;
+    margin-bottom: 4;
+    align-items: center;
+  }
+  .recipe-row {
+    flex-direction: row;
+    align-items: center;
+    gap: 6;
+    padding: 5;
+    background-color: rgba(120, 60, 200, 0.12);
+    border-radius: 5;
+  }
+  .recipe-dot {
+    width: 12;
+    height: 12;
+    border-radius: 6;
+    background-color: #ff4444;
+  }
+  .recipe-name {
+    font-size: 13;
+    color: #e0c0ff;
+    width: 110;
+  }
+  .recipe-ingredients {
+    font-size: 10;
+    color: rgba(200, 180, 255, 0.6);
+  }
+  .close-btn {
+    padding: 8;
+    background-color: rgba(120, 60, 200, 0.25);
+    border-radius: 6;
+    align-items: center;
+    cursor: pointer;
+    margin-top: 4;
+  }
+  .close-text {
+    font-size: 14;
+    color: #e0c0ff;
+  }
+</style>
+<Panel class="root">
+  <div class="header">RECIPE BOOK</div>
+  <div class="recipe-row" id="recipe-0">
+    <div class="recipe-dot" id="rdot-0"></div>
+    <div class="recipe-name" id="rname-0">Health</div>
+    <div class="recipe-ingredients" id="ringr-0">Herb + Crystal</div>
+  </div>
+  <div class="recipe-row" id="recipe-1">
+    <div class="recipe-dot" id="rdot-1"></div>
+    <div class="recipe-name" id="rname-1">Mana</div>
+    <div class="recipe-ingredients" id="ringr-1">Crystal + Essence</div>
+  </div>
+  <div class="recipe-row" id="recipe-2">
+    <div class="recipe-dot" id="rdot-2"></div>
+    <div class="recipe-name" id="rname-2">Speed</div>
+    <div class="recipe-ingredients" id="ringr-2">Herb + Mushroom</div>
+  </div>
+  <div class="recipe-row" id="recipe-3">
+    <div class="recipe-dot" id="rdot-3"></div>
+    <div class="recipe-name" id="rname-3">Shield</div>
+    <div class="recipe-ingredients" id="ringr-3">Crystal + Scale</div>
+  </div>
+  <div class="recipe-row" id="recipe-4">
+    <div class="recipe-dot" id="rdot-4"></div>
+    <div class="recipe-name" id="rname-4">Poison</div>
+    <div class="recipe-ingredients" id="ringr-4">Mushroom + Fang</div>
+  </div>
+  <div class="recipe-row" id="recipe-5">
+    <div class="recipe-dot" id="rdot-5"></div>
+    <div class="recipe-name" id="rname-5">Phoenix Elixir</div>
+    <div class="recipe-ingredients" id="ringr-5">Feather + Herb + Crystal</div>
+  </div>
+  <div class="recipe-row" id="recipe-6">
+    <div class="recipe-dot" id="rdot-6"></div>
+    <div class="recipe-name" id="rname-6">Abyssal Draught</div>
+    <div class="recipe-ingredients" id="ringr-6">Pearl + Fang + Essence</div>
+  </div>
+  <div class="recipe-row" id="recipe-7">
+    <div class="recipe-dot" id="rdot-7"></div>
+    <div class="recipe-name" id="rname-7">Invisibility</div>
+    <div class="recipe-ingredients" id="ringr-7">Void + Frost</div>
+  </div>
+  <div class="recipe-row" id="recipe-8">
+    <div class="recipe-dot" id="rdot-8"></div>
+    <div class="recipe-name" id="rname-8">Thunderbolt</div>
+    <div class="recipe-ingredients" id="ringr-8">Sun + Scale</div>
+  </div>
+  <div class="recipe-row" id="recipe-9">
+    <div class="recipe-dot" id="rdot-9"></div>
+    <div class="recipe-name" id="rname-9">Elixir of Wisdom</div>
+    <div class="recipe-ingredients" id="ringr-9">Frost + Crystal + Essence</div>
+  </div>
+  <div class="recipe-row" id="recipe-10">
+    <div class="recipe-dot" id="rdot-10"></div>
+    <div class="recipe-name" id="rname-10">Void Walker</div>
+    <div class="recipe-ingredients" id="ringr-10">Void + Fang + Pearl</div>
+  </div>
+  <div class="close-btn" id="btn-close">
+    <div class="close-text">CLOSE</div>
+  </div>
+</Panel>

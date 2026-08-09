@@ -1,0 +1,83 @@
+<style>
+  .root {
+    flex-direction: row;
+    align-items: center;
+    padding: 10;
+    gap: 14;
+    background-color: rgba(10, 5, 25, 0.85);
+    border-radius: 8;
+    border-color: rgba(180, 100, 255, 0.3);
+    border-width: 1;
+    width: 540;
+    height: 60;
+    justify-content: space-between;
+  }
+  .stat-group {
+    flex-direction: column;
+    align-items: center;
+    gap: 2;
+  }
+  .stat-label {
+    font-size: 10;
+    color: rgba(200, 160, 255, 0.5);
+  }
+  .stat-value {
+    font-size: 20;
+    color: #e0c0ff;
+  }
+  .combo-value {
+    font-size: 20;
+    color: #ffcc00;
+  }
+  .timer-value {
+    font-size: 20;
+    color: #80ffaa;
+  }
+  .wave-value {
+    font-size: 20;
+    color: #a0c0ff;
+  }
+  .diff-value {
+    font-size: 16;
+    color: #ff9966;
+  }
+  .powerup-label {
+    font-size: 12;
+    color: #ffdd66;
+  }
+  .hint-text {
+    font-size: 11;
+    color: rgba(255, 220, 100, 0.8);
+    align-items: center;
+  }
+</style>
+<Panel class="root">
+  <div class="stat-group">
+    <div class="stat-label">SCORE</div>
+    <div class="stat-value" id="score">0</div>
+  </div>
+  <div class="stat-group">
+    <div class="stat-label">WAVE</div>
+    <div class="wave-value" id="wave">1</div>
+  </div>
+  <div class="stat-group">
+    <div class="stat-label">TIMER</div>
+    <div class="timer-value" id="timer">60</div>
+  </div>
+  <div class="stat-group">
+    <div class="stat-label">COMBO</div>
+    <div class="combo-value" id="combo">x1</div>
+  </div>
+  <div class="stat-group">
+    <div class="stat-label">LIVES</div>
+    <div class="stat-value" id="lives">3</div>
+  </div>
+  <div class="stat-group">
+    <div class="stat-label">DIFFICULTY</div>
+    <div class="diff-value" id="difficulty">EASY</div>
+  </div>
+  <div class="stat-group">
+    <div class="powerup-label" id="powerup"></div>
+  </div>
+  <div class="hint-text" id="hint"></div>
+</Panel>

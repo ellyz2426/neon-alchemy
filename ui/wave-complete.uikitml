@@ -1,0 +1,85 @@
+<style>
+  .root {
+    flex-direction: column;
+    align-items: center;
+    padding: 28;
+    gap: 12;
+    background-color: rgba(10, 5, 25, 0.95);
+    border-radius: 16;
+    border-color: rgba(180, 100, 255, 0.5);
+    border-width: 2;
+    width: 320;
+  }
+  .title {
+    font-size: 28;
+    color: #d4a0ff;
+  }
+  .wave-num {
+    font-size: 18;
+    color: rgba(200, 160, 255, 0.7);
+  }
+  .stars {
+    font-size: 32;
+    color: #ffcc00;
+  }
+  .star-label {
+    font-size: 12;
+    color: rgba(255, 200, 80, 0.7);
+  }
+  .stat-row {
+    flex-direction: row;
+    justify-content: space-between;
+    width: 240;
+    padding: 4;
+  }
+  .stat-label {
+    font-size: 14;
+    color: rgba(200, 160, 255, 0.5);
+  }
+  .stat-val {
+    font-size: 14;
+    color: #e0c0ff;
+  }
+  .bonus-val {
+    font-size: 14;
+    color: #ffcc00;
+  }
+  .btn {
+    padding: 14;
+    background-color: rgba(120, 60, 200, 0.3);
+    border-radius: 8;
+    width: 200;
+    align-items: center;
+    cursor: pointer;
+    margin-top: 6;
+  }
+  .btn-text {
+    font-size: 18;
+    color: #e0c0ff;
+  }
+</style>
+<Panel class="root">
+  <div class="title">WAVE COMPLETE</div>
+  <div class="wave-num" id="wave-num">Wave 1</div>
+  <div class="stars" id="stars">★ ★ ★</div>
+  <div class="star-label" id="star-label">PERFECT</div>
+  <div class="stat-row">
+    <div class="stat-label">Potions Brewed</div>
+    <div class="stat-val" id="potions-brewed">0</div>
+  </div>
+  <div class="stat-row">
+    <div class="stat-label">Perfect Brews</div>
+    <div class="stat-val" id="perfect-brews">0</div>
+  </div>
+  <div class="stat-row">
+    <div class="stat-label">Best Combo</div>
+    <div class="bonus-val" id="best-combo">x1</div>
+  </div>
+  <div class="stat-row">
+    <div class="stat-label">Wave Score</div>
+    <div class="stat-val" id="wave-score">0</div>
+  </div>
+  <div class="btn" id="btn-next">
+    <div class="btn-text">NEXT WAVE</div>
+  </div>
+</Panel>
