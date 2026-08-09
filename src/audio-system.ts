@@ -267,6 +267,27 @@ export class AudioSystem extends createSystem({}) {
 		osc2.stop(now + 1.0);
 	}
 
+	playPowerUp() {
+		this.ensureAudioCtx();
+		if (!this.audioCtx || !this.masterGain) return;
+		const now = this.audioCtx.currentTime;
+		// Bright ascending chime — three quick notes
+		for (let i = 0; i < 3; i++) {
+			const osc = this.audioCtx.createOscillator();
+			const gain = this.audioCtx.createGain();
+			osc.type = 'sine';
+			const freq = 600 + i * 200;
+			const start = now + i * 0.08;
+			osc.frequency.setValueAtTime(freq, start);
+			gain.gain.setValueAtTime(0.12, start);
+			gain.gain.exponentialRampToValueAtTime(0.001, start + 0.25);
+			osc.connect(gain);
+			gain.connect(this.masterGain);
+			osc.start(start);
+			osc.stop(start + 0.25);
+		}
+	}
+
 	update(_delta: number, _time: number) {
 		// No per-frame updates needed
 	}

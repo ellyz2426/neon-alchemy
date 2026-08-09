@@ -156,6 +156,9 @@ export class EnvironmentSystem extends createSystem({}) {
 	// Cauldron liquid stirring
 	private cauldronLiquidOverlay: Mesh | null = null;
 
+	// Cauldron smoke particles
+	private smokeParticles: { mesh: Mesh; baseX: number; speed: number; phase: number }[] = [];
+
 	init() {
 		this.buildWorkshop();
 		this.buildCauldron();
@@ -170,6 +173,7 @@ export class EnvironmentSystem extends createSystem({}) {
 		this.buildLifeOrbs();
 		this.buildPatronSpirits();
 		this.buildCauldronLiquidOverlay();
+		this.buildCauldronSmoke();
 	}
 
 	private buildWorkshop() {
@@ -736,6 +740,7 @@ export class EnvironmentSystem extends createSystem({}) {
 		const positions: [number, number, number, number][] = [
 			[-2.5, 1.2, -2.0, 0.4], [-2.5, 1.2, -1.0, 0.3], [-2.5, 1.2, 0.0, 0.2], [-2.5, 1.2, 1.0, 0.1],
 			[2.5, 1.2, -2.0, -0.4], [2.5, 1.2, -1.0, -0.3], [2.5, 1.2, 0.0, -0.2], [2.5, 1.2, 1.0, -0.1],
+			[-2.5, 1.9, -1.5, 0.35], [2.5, 1.9, -1.5, -0.35], [0, 1.6, -3.0, 0],
 		];
 
 		INGREDIENTS.forEach((ingredient, i) => {
@@ -767,6 +772,9 @@ export class EnvironmentSystem extends createSystem({}) {
 				case 'fang': geo = new ConeGeometry(0.025, 0.12, 4); break;
 				case 'feather': geo = new CylinderGeometry(0.01, 0.04, 0.12, 6); break;
 				case 'pearl': geo = new SphereGeometry(0.04, 16, 12); break;
+			case 'void': geo = new BoxGeometry(0.07, 0.07, 0.07); break;
+			case 'frost': geo = new ConeGeometry(0.035, 0.1, 6); break;
+			case 'sun': geo = new SphereGeometry(0.05, 10, 8); break;
 				default: geo = new SphereGeometry(0.06, 8, 6);
 			}
 
@@ -1089,6 +1097,27 @@ export class EnvironmentSystem extends createSystem({}) {
 		this.cauldronLiquidOverlay.rotation.x = -Math.PI / 2;
 		this.cauldronLiquidOverlay.position.set(0, 0.73, 0);
 		this.cauldronGroup.add(this.cauldronLiquidOverlay);
+	}
+
+	private buildCauldronSmoke() {
+		const world = this.world as World;
+		for (let i = 0; i < 8; i++) {
+			const smoke = new Mesh(
+				new SphereGeometry(0.04 + Math.random() * 0.03, 6, 4),
+				new MeshStandardMaterial({
+					color: 0xbb99dd,
+					emissive: 0x8866aa,
+					emissiveIntensity: 0.3,
+					transparent: true,
+					opacity: 0,
+				})
+			);
+			const bx = (Math.random() - 0.5) * 0.3;
+			smoke.position.set(bx, 1.0, -0.5);
+			smoke.userData.life = Math.random() * 4;
+			world.scene.add(smoke);
+			this.smokeParticles.push({ mesh: smoke, baseX: bx, speed: 0.15 + Math.random() * 0.1, phase: Math.random() * Math.PI * 2 });
+		}
 	}
 
 	// --- Cooldown methods ---
@@ -1776,6 +1805,27 @@ export class EnvironmentSystem extends createSystem({}) {
 				overlayMat.opacity = MathUtils.lerp(overlayMat.opacity, 0, delta * 5);
 				// Slowly stop rotation
 				this.cauldronLiquid.rotation.y *= 0.95;
+			}
+		}
+
+		// Cauldron smoke particles
+		for (const sp of this.smokeParticles) {
+			sp.mesh.userData.life = (sp.mesh.userData.life as number) + delta;
+			const life = sp.mesh.userData.life as number;
+			const cycle = life % 4; // 4-second cycle
+			const sMat = sp.mesh.material as MeshStandardMaterial;
+			if (this.isPlaying) {
+				const rise = cycle * sp.speed;
+				sp.mesh.position.y = 1.0 + rise;
+				sp.mesh.position.x = sp.baseX + Math.sin(life * 1.5 + sp.phase) * 0.15;
+				sp.mesh.position.z = -0.5 + Math.cos(life * 0.8 + sp.phase) * 0.1;
+				// Fade in then out over the cycle
+				const fadeIn = Math.min(cycle / 0.5, 1);
+				const fadeOut = Math.max(1 - (cycle - 2.5) / 1.5, 0);
+				sMat.opacity = fadeIn * fadeOut * 0.2;
+				sp.mesh.scale.setScalar(0.8 + cycle * 0.3);
+			} else {
+				sMat.opacity = 0;
 			}
 		}
 	}

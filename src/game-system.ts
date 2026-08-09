@@ -2,6 +2,7 @@ import { createSystem, UIKitMLAsset, World, Vector3 } from '@iwsdk/core';
 import {
 	type GameData,
 	type Order,
+	type PowerUp,
 	createInitialGameData,
 	findMatchingRecipe,
 	getIngredientById,
@@ -9,6 +10,7 @@ import {
 	INGREDIENTS,
 	RECIPES,
 	findPartialRecipeHints,
+	POWER_UP_DEFS,
 } from './game-data.js';
 import { EnvironmentSystem } from './environment-system.js';
 import { AudioSystem } from './audio-system.js';
@@ -235,8 +237,8 @@ export class GameSystem extends createSystem({}) {
 		if (this.data.orders.length >= 3) return;
 
 		const wave = this.data.wave;
-		// More complex recipes at higher waves
-		const availableRecipes = wave >= 4 ? RECIPES : wave >= 2 ? RECIPES.slice(0, 5) : RECIPES.slice(0, 3);
+		// Progressive recipe unlocking: wave 1 = basic (first 4), wave 2-3 = mid (first 7), wave 4+ = all 11
+		const availableRecipes = wave >= 4 ? RECIPES : wave >= 2 ? RECIPES.slice(0, 7) : RECIPES.slice(0, 4);
 		const recipe = availableRecipes[Math.floor(Math.random() * availableRecipes.length)];
 
 		const baseTime = Math.max(15, 35 - wave * 3);
@@ -327,7 +329,8 @@ export class GameSystem extends createSystem({}) {
 				this.data.combo++;
 				if (this.data.combo > this.data.bestCombo) this.data.bestCombo = this.data.combo;
 				const comboMultiplier = 1 + (this.data.combo - 1) * 0.25;
-				const totalPoints = Math.floor(points * comboMultiplier);
+				const doubleMultiplier = this.data.activePowerUp?.type === 'double_points' ? 2 : 1;
+				const totalPoints = Math.floor(points * comboMultiplier * doubleMultiplier);
 				this.data.score += totalPoints;
 				this.data.waveScore += totalPoints;
 				this.data.potionsBrewed++;
@@ -349,6 +352,8 @@ export class GameSystem extends createSystem({}) {
 				this.env.addCompletedBottle(recipe.color);
 				// Spirit fulfilled for this order
 				this.env.setSpiritState(orderIdx, 'fulfilled');
+				// Random power-up drop (20% chance, slightly higher at higher waves)
+				this.tryDropPowerUp();
 			} else {
 				// Valid potion but no matching order — partial points
 				const partialPoints = Math.floor(recipe.points * 0.3);
@@ -406,6 +411,45 @@ export class GameSystem extends createSystem({}) {
 		this.data.cauldronIngredients = [];
 		this.env.setCauldronColor(0x8844cc);
 		this.updateCauldronPanel();
+	}
+
+	private tryDropPowerUp() {
+		if (this.data.activePowerUp) return; // already have one
+		const dropChance = 0.15 + Math.min(this.data.wave * 0.02, 0.15);
+		if (Math.random() > dropChance) return;
+
+		// Weighted random selection
+		const totalWeight = POWER_UP_DEFS.reduce((s, d) => s + d.weight, 0);
+		let roll = Math.random() * totalWeight;
+		for (const def of POWER_UP_DEFS) {
+			roll -= def.weight;
+			if (roll <= 0) {
+				// Extra life only if below 3
+				if (def.type === 'extra_life' && this.data.lives >= 3) continue;
+				this.activatePowerUp({ type: def.type, duration: def.duration, label: def.label });
+				return;
+			}
+		}
+	}
+
+	private activatePowerUp(powerUp: PowerUp) {
+		this.data.activePowerUp = powerUp;
+		this.data.powerUpsUsed++;
+		this.audio.playPowerUp();
+
+		if (powerUp.type === 'extra_life') {
+			this.data.lives = Math.min(this.data.lives + 1, 4);
+			this.env.setLives(this.data.lives);
+			this.updateHUD();
+			// Instant effect — clear after brief display
+			setTimeout(() => {
+				if (this.data.activePowerUp?.type === 'extra_life') {
+					this.data.activePowerUp = null;
+					this.updateHUD();
+				}
+			}, 1500);
+		}
+		this.updateHUD();
 	}
 
 	private handleOrderExpired(index: number) {
@@ -497,6 +541,7 @@ export class GameSystem extends createSystem({}) {
 		panel.getElementById('waves-cleared')?.setProperties({ text: `${this.data.wave}` });
 		panel.getElementById('total-potions')?.setProperties({ text: `${this.data.totalPotionsBrewed}` });
 		panel.getElementById('high-score')?.setProperties({ text: `${this.data.highScore}` });
+		panel.getElementById('powerups-used')?.setProperties({ text: `${this.data.powerUpsUsed}` });
 		panel.getElementById('new-record')?.setProperties({
 			text: this.data.score >= this.data.highScore ? '★ NEW RECORD! ★' : '',
 		});
@@ -519,6 +564,18 @@ export class GameSystem extends createSystem({}) {
 		panel.getElementById('combo')?.setProperties({ text: `x${Math.max(1, this.data.combo)}` });
 		panel.getElementById('lives')?.setProperties({ text: `${this.data.lives}` });
 		panel.getElementById('difficulty')?.setProperties({ text: this.getDifficultyLabel(this.data.wave) });
+
+		// Power-up indicator
+		const puEl = panel.getElementById('powerup');
+		if (puEl) {
+			if (this.data.activePowerUp) {
+				const pu = this.data.activePowerUp;
+				const timeLeft = pu.duration > 0 ? ` ${Math.ceil(pu.duration)}s` : '';
+				puEl.setProperties({ text: `${pu.label}${timeLeft}` });
+			} else {
+				puEl.setProperties({ text: '' });
+			}
+		}
 
 		// Tutorial hint text
 		const hintEl = panel.getElementById('hint');
@@ -663,11 +720,14 @@ export class GameSystem extends createSystem({}) {
 			this.orderSpawnTimer = this.orderSpawnInterval;
 		}
 
-		// Order timers
-		for (let i = this.data.orders.length - 1; i >= 0; i--) {
-			this.data.orders[i].timeRemaining -= delta;
-			if (this.data.orders[i].timeRemaining <= 0) {
-				this.handleOrderExpired(i);
+		// Order timers (frozen during time_freeze power-up)
+		const timeFrozen = this.data.activePowerUp?.type === 'time_freeze';
+		if (!timeFrozen) {
+			for (let i = this.data.orders.length - 1; i >= 0; i--) {
+				this.data.orders[i].timeRemaining -= delta;
+				if (this.data.orders[i].timeRemaining <= 0) {
+					this.handleOrderExpired(i);
+				}
 			}
 		}
 
@@ -712,6 +772,15 @@ export class GameSystem extends createSystem({}) {
 			if (this.tutorialTimer > 15) {
 				this.tutorialStep = 0;
 				this.hasShownTutorial = true;
+			}
+			this.updateHUD();
+		}
+
+		// Power-up duration countdown
+		if (this.data.activePowerUp && this.data.activePowerUp.duration > 0) {
+			this.data.activePowerUp.duration -= delta;
+			if (this.data.activePowerUp.duration <= 0) {
+				this.data.activePowerUp = null;
 			}
 			this.updateHUD();
 		}

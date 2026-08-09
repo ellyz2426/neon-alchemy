@@ -33,6 +33,9 @@ export const INGREDIENTS: Ingredient[] = [
 	{ id: 'fang', name: 'Shadow Fang', color: 0x8844cc, glowColor: 0xaa66ff },
 	{ id: 'feather', name: 'Phoenix Feather', color: 0xff6622, glowColor: 0xff8844 },
 	{ id: 'pearl', name: 'Abyssal Pearl', color: 0x44cccc, glowColor: 0x66ffff },
+	{ id: 'void', name: 'Void Shard', color: 0x331144, glowColor: 0x6622aa },
+	{ id: 'frost', name: 'Frost Lily', color: 0xaaddff, glowColor: 0xcceeFF },
+	{ id: 'sun', name: 'Sun Stone', color: 0xffaa22, glowColor: 0xffcc44 },
 ];
 
 export const RECIPES: PotionRecipe[] = [
@@ -92,9 +95,55 @@ export const RECIPES: PotionRecipe[] = [
 		glowColor: 0x4488cc,
 		points: 220,
 	},
+	{
+		id: 'invisibility',
+		name: 'Invisibility Draught',
+		ingredients: ['void', 'frost'],
+		color: 0x8866bb,
+		glowColor: 0xaa88dd,
+		points: 180,
+	},
+	{
+		id: 'thunderbolt',
+		name: 'Thunderbolt Tonic',
+		ingredients: ['sun', 'scale'],
+		color: 0xffdd00,
+		glowColor: 0xffee44,
+		points: 170,
+	},
+	{
+		id: 'wisdom',
+		name: 'Elixir of Wisdom',
+		ingredients: ['frost', 'crystal', 'essence'],
+		color: 0x88ddff,
+		glowColor: 0xaaeeFF,
+		points: 240,
+	},
+	{
+		id: 'voidwalker',
+		name: 'Void Walker',
+		ingredients: ['void', 'fang', 'pearl'],
+		color: 0x220044,
+		glowColor: 0x441177,
+		points: 260,
+	},
 ];
 
 export type GameState = 'menu' | 'playing' | 'wave_complete' | 'game_over' | 'recipes';
+
+export type PowerUpType = 'time_freeze' | 'double_points' | 'extra_life';
+
+export interface PowerUp {
+	type: PowerUpType;
+	duration: number; // remaining seconds (0 for instant)
+	label: string;
+}
+
+export const POWER_UP_DEFS: { type: PowerUpType; label: string; duration: number; weight: number }[] = [
+	{ type: 'time_freeze', label: '⏸ TIME FREEZE', duration: 5, weight: 3 },
+	{ type: 'double_points', label: '×2 DOUBLE PTS', duration: 8, weight: 3 },
+	{ type: 'extra_life', label: '♥ EXTRA LIFE', duration: 0, weight: 2 },
+];
 
 export interface GameData {
 	state: GameState;
@@ -115,6 +164,8 @@ export interface GameData {
 	isBrewing: boolean;
 	brewProgress: number;
 	brewsByRecipe: Record<string, number>;
+	activePowerUp: PowerUp | null;
+	powerUpsUsed: number;
 }
 
 export function createInitialGameData(): GameData {
@@ -138,6 +189,8 @@ export function createInitialGameData(): GameData {
 		isBrewing: false,
 		brewProgress: 0,
 		brewsByRecipe: {},
+		activePowerUp: null,
+		powerUpsUsed: 0,
 	};
 }
 
