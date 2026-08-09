@@ -36,6 +36,26 @@
     font-size: 16;
     color: #ffcc00;
   }
+  .recipe-section-header {
+    font-size: 14;
+    color: #d4a0ff;
+    margin-top: 8;
+    align-items: center;
+  }
+  .recipe-stat-row {
+    flex-direction: row;
+    justify-content: space-between;
+    width: 240;
+    padding: 2;
+  }
+  .recipe-stat-name {
+    font-size: 12;
+    color: rgba(200, 160, 255, 0.5);
+  }
+  .recipe-stat-count {
+    font-size: 12;
+    color: #e0c0ff;
+  }
   .btn {
     padding: 14;
     background-color: rgba(120, 60, 200, 0.3);
@@ -69,6 +89,35 @@
     <div class="highscore-val" id="high-score">0</div>
   </div>
   <div class="new-record" id="new-record"></div>
+  <div class="recipe-section-header">BREWS BY RECIPE</div>
+  <div class="recipe-stat-row">
+    <div class="recipe-stat-name" id="rstat-name-0">Health</div>
+    <div class="recipe-stat-count" id="rstat-count-0">0</div>
+  </div>
+  <div class="recipe-stat-row">
+    <div class="recipe-stat-name" id="rstat-name-1">Mana</div>
+    <div class="recipe-stat-count" id="rstat-count-1">0</div>
+  </div>
+  <div class="recipe-stat-row">
+    <div class="recipe-stat-name" id="rstat-name-2">Speed</div>
+    <div class="recipe-stat-count" id="rstat-count-2">0</div>
+  </div>
+  <div class="recipe-stat-row">
+    <div class="recipe-stat-name" id="rstat-name-3">Shield</div>
+    <div class="recipe-stat-count" id="rstat-count-3">0</div>
+  </div>
+  <div class="recipe-stat-row">
+    <div class="recipe-stat-name" id="rstat-name-4">Poison</div>
+    <div class="recipe-stat-count" id="rstat-count-4">0</div>
+  </div>
+  <div class="recipe-stat-row">
+    <div class="recipe-stat-name" id="rstat-name-5">Phoenix</div>
+    <div class="recipe-stat-count" id="rstat-count-5">0</div>
+  </div>
+  <div class="recipe-stat-row">
+    <div class="recipe-stat-name" id="rstat-name-6">Abyss</div>
+    <div class="recipe-stat-count" id="rstat-count-6">0</div>
+  </div>
   <div class="btn" id="btn-replay">
     <div class="btn-text">PLAY AGAIN</div>
   </div>

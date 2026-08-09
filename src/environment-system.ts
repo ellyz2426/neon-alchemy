@@ -16,9 +16,31 @@ import {
 	ConeGeometry,
 	PlaneGeometry,
 	DoubleSide,
-	AdditiveBlending,
 } from '@iwsdk/core';
 import { INGREDIENTS, type Ingredient } from './game-data.js';
+
+interface PotionBottle {
+	group: Group;
+	life: number;
+	maxLife: number;
+	startY: number;
+}
+
+interface ScorePopup {
+	mesh: Mesh;
+	life: number;
+	maxLife: number;
+	startY: number;
+	startX: number;
+	startZ: number;
+}
+
+interface FlameEntry {
+	mesh: Mesh;
+	baseScaleY: number;
+	baseY: number;
+	phase: number;
+}
 
 export class EnvironmentSystem extends createSystem({}) {
 	private cauldronGroup!: Group;
@@ -40,6 +62,19 @@ export class EnvironmentSystem extends createSystem({}) {
 
 	// Hover state
 	private hoveredIngredient: string | null = null;
+
+	// Rune symbols on floor
+	private runeSymbols: Mesh[] = [];
+	private isPlaying = false;
+
+	// Fire under cauldron
+	private flames: FlameEntry[] = [];
+
+	// Potion bottle visualization
+	private potionBottles: PotionBottle[] = [];
+
+	// Score popup meshes
+	private scorePopups: ScorePopup[] = [];
 
 	init() {
 		this.buildWorkshop();
@@ -79,6 +114,65 @@ export class EnvironmentSystem extends createSystem({}) {
 		innerCircle.rotation.x = -Math.PI / 2;
 		innerCircle.position.set(0, 0.015, -0.5);
 		world.scene.add(innerCircle);
+
+		// Rune symbols on magic circle — 8 runes arranged in a ring
+		for (let i = 0; i < 8; i++) {
+			const angle = (i / 8) * Math.PI * 2;
+			const radius = 1.05;
+			const rx = Math.cos(angle) * radius;
+			const rz = -0.5 + Math.sin(angle) * radius;
+
+			// Each rune is a small geometric shape
+			const runeGroup = new Group();
+
+			// Diamond shape rune (rotated box)
+			const runeMesh = new Mesh(
+				new BoxGeometry(0.06, 0.005, 0.06),
+				new MeshStandardMaterial({
+					color: 0xbb77ff,
+					emissive: 0x8844cc,
+					emissiveIntensity: 0.2,
+					transparent: true,
+					opacity: 0.5,
+					side: DoubleSide,
+				})
+			);
+			runeMesh.rotation.y = angle + Math.PI / 4;
+			runeGroup.add(runeMesh);
+
+			// Tiny cross lines on top
+			const crossA = new Mesh(
+				new BoxGeometry(0.04, 0.003, 0.006),
+				new MeshStandardMaterial({
+					color: 0xddaaff,
+					emissive: 0xaa66ff,
+					emissiveIntensity: 0.3,
+					transparent: true,
+					opacity: 0.6,
+				})
+			);
+			crossA.position.y = 0.004;
+			runeGroup.add(crossA);
+
+			const crossB = new Mesh(
+				new BoxGeometry(0.006, 0.003, 0.04),
+				new MeshStandardMaterial({
+					color: 0xddaaff,
+					emissive: 0xaa66ff,
+					emissiveIntensity: 0.3,
+					transparent: true,
+					opacity: 0.6,
+				})
+			);
+			crossB.position.y = 0.004;
+			runeGroup.add(crossB);
+
+			runeGroup.position.set(rx, 0.012, rz);
+			world.scene.add(runeGroup);
+
+			// Track the main rune mesh for animation
+			this.runeSymbols.push(runeMesh);
+		}
 
 		// Walls
 		const wallMat = new MeshStandardMaterial({ color: 0x2a2030, roughness: 0.85 });
@@ -263,8 +357,9 @@ export class EnvironmentSystem extends createSystem({}) {
 			this.cauldronGroup.add(leg);
 		}
 
-		// Fire under cauldron
+		// Fire under cauldron - tracked for animation
 		for (let i = 0; i < 5; i++) {
+			const baseScaleY = 0.8 + Math.random() * 0.4;
 			const flame = new Mesh(
 				new ConeGeometry(0.04 + Math.random() * 0.03, 0.15 + Math.random() * 0.1, 4),
 				new MeshStandardMaterial({
@@ -275,12 +370,14 @@ export class EnvironmentSystem extends createSystem({}) {
 					opacity: 0.7,
 				})
 			);
+			const baseY = 0.1;
 			flame.position.set(
 				(Math.random() - 0.5) * 0.3,
-				0.1,
+				baseY,
 				(Math.random() - 0.5) * 0.3
 			);
 			this.cauldronGroup.add(flame);
+			this.flames.push({ mesh: flame, baseScaleY, baseY, phase: Math.random() * Math.PI * 2 });
 		}
 
 		// Cauldron light
@@ -367,35 +464,27 @@ export class EnvironmentSystem extends createSystem({}) {
 			let geo;
 			switch (ingredient.id) {
 				case 'herb':
-					// Leafy cluster
 					geo = new SphereGeometry(0.06, 6, 4);
 					break;
 				case 'crystal':
-					// Crystalline shard
 					geo = new ConeGeometry(0.04, 0.12, 5);
 					break;
 				case 'mushroom':
-					// Mushroom cap shape
 					geo = new SphereGeometry(0.06, 8, 4);
 					break;
 				case 'essence':
-					// Small sphere (liquid essence)
 					geo = new SphereGeometry(0.045, 12, 8);
 					break;
 				case 'scale':
-					// Flat diamond shape
 					geo = new BoxGeometry(0.09, 0.02, 0.09);
 					break;
 				case 'fang':
-					// Sharp fang
 					geo = new ConeGeometry(0.025, 0.12, 4);
 					break;
 				case 'feather':
-					// Elongated shape
 					geo = new CylinderGeometry(0.01, 0.04, 0.12, 6);
 					break;
 				case 'pearl':
-					// Perfect sphere
 					geo = new SphereGeometry(0.04, 16, 12);
 					break;
 				default:
@@ -420,9 +509,8 @@ export class EnvironmentSystem extends createSystem({}) {
 			light.position.set(x, y + 0.12, z);
 			world.scene.add(light);
 
-			// 3D label plate above shelf — glowing name indicator
+			// 3D label plate above shelf
 			const labelGroup = new Group();
-			// Small colored indicator bar
 			const labelBar = new Mesh(
 				new BoxGeometry(0.35, 0.035, 0.005),
 				new MeshStandardMaterial({
@@ -435,7 +523,6 @@ export class EnvironmentSystem extends createSystem({}) {
 			);
 			labelGroup.add(labelBar);
 
-			// Tiny dot on each side
 			const dotL = new Mesh(
 				new SphereGeometry(0.008, 6, 4),
 				new MeshStandardMaterial({ color: ingredient.glowColor, emissive: ingredient.glowColor, emissiveIntensity: 1 })
@@ -470,7 +557,6 @@ export class EnvironmentSystem extends createSystem({}) {
 		];
 
 		positions.forEach(([x, y, z]) => {
-			// Candle body
 			const candle = new Mesh(
 				new CylinderGeometry(0.02, 0.025, 0.15, 6),
 				new MeshStandardMaterial({ color: 0xeedd99 })
@@ -478,7 +564,6 @@ export class EnvironmentSystem extends createSystem({}) {
 			candle.position.set(x, y, z);
 			world.scene.add(candle);
 
-			// Flame
 			const flame = new Mesh(
 				new ConeGeometry(0.015, 0.04, 4),
 				new MeshStandardMaterial({
@@ -492,7 +577,6 @@ export class EnvironmentSystem extends createSystem({}) {
 			flame.position.set(x, y + 0.1, z);
 			world.scene.add(flame);
 
-			// Light
 			const light = new PointLight(0xff9944, 0.8, 3);
 			light.position.set(x, y + 0.15, z);
 			world.scene.add(light);
@@ -536,6 +620,10 @@ export class EnvironmentSystem extends createSystem({}) {
 		this.steamParticles.forEach((s) => (s.visible = active));
 	}
 
+	setPlaying(playing: boolean) {
+		this.isPlaying = playing;
+	}
+
 	highlightIngredient(id: string, highlight: boolean) {
 		const shelf = this.ingredientShelves.get(id);
 		if (shelf) {
@@ -543,7 +631,6 @@ export class EnvironmentSystem extends createSystem({}) {
 			const mat = shelf.mesh.material as MeshStandardMaterial;
 			mat.emissiveIntensity = highlight ? 1.2 : 0.6;
 			mat.opacity = highlight ? 1.0 : 0.85;
-			// Scale label when highlighted
 			if (shelf.label) {
 				shelf.label.scale.set(highlight ? 1.3 : 1, highlight ? 1.3 : 1, highlight ? 1.3 : 1);
 			}
@@ -577,7 +664,7 @@ export class EnvironmentSystem extends createSystem({}) {
 		this.brewGlowRing.position.set(0, 0.85, -0.5);
 		world.scene.add(this.brewGlowRing);
 
-		// Brew sparkle particles — ring of sparkles that spin during brewing
+		// Brew sparkle particles
 		for (let i = 0; i < 16; i++) {
 			const angle = (i / 16) * Math.PI * 2;
 			const sparkle = new Mesh(
@@ -610,6 +697,119 @@ export class EnvironmentSystem extends createSystem({}) {
 		this.isBrewing = false;
 	}
 
+	/**
+	 * Spawn a completed potion bottle near cauldron — floats up and fades
+	 */
+	spawnPotionBottle(color: number) {
+		const world = this.world as World;
+		const group = new Group();
+
+		const potionColor = new Color(color);
+
+		// Bottle body
+		const body = new Mesh(
+			new CylinderGeometry(0.025, 0.035, 0.1, 8),
+			new MeshStandardMaterial({
+				color: potionColor,
+				emissive: potionColor,
+				emissiveIntensity: 0.8,
+				transparent: true,
+				opacity: 0.85,
+			})
+		);
+		group.add(body);
+
+		// Bottle neck
+		const neck = new Mesh(
+			new CylinderGeometry(0.012, 0.02, 0.04, 6),
+			new MeshStandardMaterial({
+				color: potionColor,
+				emissive: potionColor,
+				emissiveIntensity: 0.6,
+				transparent: true,
+				opacity: 0.85,
+			})
+		);
+		neck.position.y = 0.07;
+		group.add(neck);
+
+		// Cork
+		const cork = new Mesh(
+			new CylinderGeometry(0.015, 0.013, 0.02, 6),
+			new MeshStandardMaterial({
+				color: 0x8a6040,
+				transparent: true,
+				opacity: 0.9,
+			})
+		);
+		cork.position.y = 0.095;
+		group.add(cork);
+
+		// Glow orb inside
+		const glow = new Mesh(
+			new SphereGeometry(0.015, 6, 4),
+			new MeshStandardMaterial({
+				color: potionColor,
+				emissive: potionColor,
+				emissiveIntensity: 2,
+				transparent: true,
+				opacity: 0.6,
+			})
+		);
+		glow.position.y = 0.02;
+		group.add(glow);
+
+		// Position beside cauldron
+		const offsetX = (Math.random() - 0.5) * 0.4;
+		const startY = 0.9;
+		group.position.set(0 + offsetX, startY, -0.5 + (Math.random() - 0.5) * 0.2);
+
+		world.scene.add(group);
+
+		this.potionBottles.push({
+			group,
+			life: 2.5,
+			maxLife: 2.5,
+			startY,
+		});
+	}
+
+	/**
+	 * Spawn a score popup indicator (golden orb that floats up and fades)
+	 */
+	spawnScorePopup(points: number) {
+		const world = this.world as World;
+
+		// Bright golden indicator sphere — size scales with points
+		const radius = 0.02 + Math.min(points / 2000, 0.03);
+		const popup = new Mesh(
+			new SphereGeometry(radius, 8, 6),
+			new MeshStandardMaterial({
+				color: 0xffdd44,
+				emissive: 0xffcc00,
+				emissiveIntensity: 2.5,
+				transparent: true,
+				opacity: 1.0,
+			})
+		);
+
+		const startX = (Math.random() - 0.5) * 0.3;
+		const startZ = -0.5 + (Math.random() - 0.5) * 0.2;
+		const startY = 1.0;
+		popup.position.set(startX, startY, startZ);
+
+		world.scene.add(popup);
+
+		this.scorePopups.push({
+			mesh: popup,
+			life: 1.5,
+			maxLife: 1.5,
+			startY,
+			startX,
+			startZ,
+		});
+	}
+
 	getIngredientPositions(): Map<string, { x: number; y: number; z: number }> {
 		const result = new Map<string, { x: number; y: number; z: number }>();
 		this.ingredientShelves.forEach((data, id) => {
@@ -635,6 +835,23 @@ export class EnvironmentSystem extends createSystem({}) {
 		// Liquid surface wobble
 		this.cauldronLiquid.position.y = 0.72 + Math.sin(this.elapsedTime * 2) * 0.005;
 
+		// Fire animation — flicker scale + opacity
+		this.flames.forEach((f) => {
+			f.phase += delta * (6 + Math.random() * 4);
+			const flicker = Math.sin(f.phase) * 0.3 + Math.sin(f.phase * 2.7) * 0.15 + Math.sin(f.phase * 5.3) * 0.1;
+			f.mesh.scale.y = f.baseScaleY + flicker * 0.5;
+			f.mesh.scale.x = 1 + flicker * 0.15;
+			f.mesh.scale.z = 1 + flicker * 0.15;
+			f.mesh.position.y = f.baseY + flicker * 0.015;
+			const fMat = f.mesh.material as MeshStandardMaterial;
+			fMat.opacity = 0.55 + flicker * 0.25;
+			fMat.emissiveIntensity = 0.8 + flicker * 0.6;
+			// Color shift between orange and yellow
+			const hue = 0.06 + flicker * 0.02;
+			fMat.color.setHSL(hue, 1.0, 0.55);
+			fMat.emissive.setHSL(hue - 0.01, 1.0, 0.45);
+		});
+
 		// Bubble animation
 		this.bubbleParticles.forEach((bubble) => {
 			if (!bubble.visible) return;
@@ -642,8 +859,8 @@ export class EnvironmentSystem extends createSystem({}) {
 			const vel = bubble.userData.velocity as number;
 			bubble.position.y += vel * delta;
 			bubble.position.x = Math.sin(this.elapsedTime * 2 + phase) * 0.15;
-			const mat = bubble.material as MeshStandardMaterial;
-			mat.opacity = Math.max(0, 0.6 - (bubble.position.y - 0.72) * 1.5);
+			const bMat = bubble.material as MeshStandardMaterial;
+			bMat.opacity = Math.max(0, 0.6 - (bubble.position.y - 0.72) * 1.5);
 			if (bubble.position.y > 1.2) {
 				bubble.position.y = 0.72;
 				bubble.position.x = (Math.random() - 0.5) * 0.5;
@@ -659,8 +876,8 @@ export class EnvironmentSystem extends createSystem({}) {
 			steam.position.x = Math.sin(this.elapsedTime + phase) * 0.15;
 			const s = 1 + (steam.position.y - 1.0) * 0.5;
 			steam.scale.set(s, s, s);
-			const mat = steam.material as MeshStandardMaterial;
-			mat.opacity = Math.max(0, 0.15 - (steam.position.y - 1.0) * 0.08);
+			const sMat = steam.material as MeshStandardMaterial;
+			sMat.opacity = Math.max(0, 0.15 - (steam.position.y - 1.0) * 0.08);
 			if (steam.position.y > 2.0) {
 				steam.position.y = 0.9;
 				steam.position.x = (Math.random() - 0.5) * 0.3;
@@ -683,8 +900,8 @@ export class EnvironmentSystem extends createSystem({}) {
 			const baseY = p.userData.baseY as number;
 			p.position.y = baseY + Math.sin(this.elapsedTime * speed + phase) * 0.3;
 			p.position.x += Math.sin(this.elapsedTime * 0.1 + phase) * 0.001;
-			const mat = p.material as MeshStandardMaterial;
-			mat.opacity = 0.15 + Math.sin(this.elapsedTime * 0.5 + phase) * 0.15;
+			const pMat = p.material as MeshStandardMaterial;
+			pMat.opacity = 0.15 + Math.sin(this.elapsedTime * 0.5 + phase) * 0.15;
 		});
 
 		// Reset pulsed ingredients
@@ -702,22 +919,37 @@ export class EnvironmentSystem extends createSystem({}) {
 			}
 		});
 
+		// Rune symbols pulsing during gameplay
+		this.runeSymbols.forEach((rune, i) => {
+			const runeMat = rune.material as MeshStandardMaterial;
+			if (this.isPlaying) {
+				const pulse = 0.4 + Math.sin(this.elapsedTime * 2 + i * 0.8) * 0.4;
+				runeMat.emissiveIntensity = 0.3 + pulse * 0.8;
+				runeMat.opacity = 0.4 + pulse * 0.4;
+				// Gentle rotation
+				rune.rotation.y += delta * 0.3;
+			} else {
+				runeMat.emissiveIntensity = MathUtils.lerp(runeMat.emissiveIntensity, 0.2, delta * 2);
+				runeMat.opacity = MathUtils.lerp(runeMat.opacity, 0.3, delta * 2);
+			}
+		});
+
 		// Brewing effect animation
 		const brewTargetOpacity = this.isBrewing ? 0.8 : 0;
 		if (this.brewGlowRing) {
-			const mat = this.brewGlowRing.material as MeshStandardMaterial;
-			mat.opacity = MathUtils.lerp(mat.opacity, brewTargetOpacity, delta * 5);
+			const bgMat = this.brewGlowRing.material as MeshStandardMaterial;
+			bgMat.opacity = MathUtils.lerp(bgMat.opacity, brewTargetOpacity, delta * 5);
 			if (this.isBrewing) {
 				this.brewGlowRing.rotation.z += delta * 2;
 				const pulse = 0.5 + Math.sin(this.elapsedTime * 4) * 0.5;
-				mat.emissiveIntensity = 1.5 + pulse;
+				bgMat.emissiveIntensity = 1.5 + pulse;
 			}
 		}
 
 		this.brewParticles.forEach((sparkle) => {
-			const mat = sparkle.material as MeshStandardMaterial;
+			const spMat = sparkle.material as MeshStandardMaterial;
 			const targetOp = this.isBrewing ? 0.7 : 0;
-			mat.opacity = MathUtils.lerp(mat.opacity, targetOp, delta * 5);
+			spMat.opacity = MathUtils.lerp(spMat.opacity, targetOp, delta * 5);
 
 			if (this.isBrewing) {
 				const baseAngle = sparkle.userData.baseAngle as number;
@@ -729,5 +961,64 @@ export class EnvironmentSystem extends createSystem({}) {
 				sparkle.position.z = -0.5 + Math.sin(angle) * radius;
 			}
 		});
+
+		// Potion bottle float + fade
+		for (let i = this.potionBottles.length - 1; i >= 0; i--) {
+			const bottle = this.potionBottles[i];
+			bottle.life -= delta;
+			const progress = 1 - bottle.life / bottle.maxLife;
+			// Float upward
+			bottle.group.position.y = bottle.startY + progress * 0.6;
+			// Gentle rotation
+			bottle.group.rotation.y += delta * 1.5;
+			// Fade out in last 40% of life
+			const fadeStart = 0.6;
+			if (progress > fadeStart) {
+				const fadeProg = (progress - fadeStart) / (1 - fadeStart);
+				const opacity = 1 - fadeProg;
+				bottle.group.traverse((child) => {
+					if (child instanceof Mesh) {
+						const cMat = child.material as MeshStandardMaterial;
+						if (cMat.transparent) {
+							cMat.opacity = Math.max(0, cMat.opacity * opacity);
+						}
+					}
+				});
+			}
+			// Scale down slightly at end
+			const scale = 1 - progress * 0.3;
+			bottle.group.scale.set(scale, scale, scale);
+
+			if (bottle.life <= 0) {
+				const world = this.world as World;
+				world.scene.remove(bottle.group);
+				this.potionBottles.splice(i, 1);
+			}
+		}
+
+		// Score popup float + fade
+		for (let i = this.scorePopups.length - 1; i >= 0; i--) {
+			const popup = this.scorePopups[i];
+			popup.life -= delta;
+			const progress = 1 - popup.life / popup.maxLife;
+			// Float upward with slight drift
+			popup.mesh.position.y = popup.startY + progress * 0.8;
+			popup.mesh.position.x = popup.startX + Math.sin(progress * Math.PI) * 0.05;
+			// Scale: grow then shrink
+			const scaleP = progress < 0.2
+				? progress / 0.2 * 1.3
+				: 1.3 - (progress - 0.2) * 0.5;
+			popup.mesh.scale.set(Math.max(0.1, scaleP), Math.max(0.1, scaleP), Math.max(0.1, scaleP));
+			// Fade out
+			const ppMat = popup.mesh.material as MeshStandardMaterial;
+			ppMat.opacity = Math.max(0, 1 - progress * 1.2);
+			ppMat.emissiveIntensity = 2.5 - progress * 2;
+
+			if (popup.life <= 0) {
+				const world = this.world as World;
+				world.scene.remove(popup.mesh);
+				this.scorePopups.splice(i, 1);
+			}
+		}
 	}
 }

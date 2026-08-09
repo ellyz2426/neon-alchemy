@@ -114,6 +114,7 @@ export interface GameData {
 	highScore: number;
 	isBrewing: boolean;
 	brewProgress: number;
+	brewsByRecipe: Record<string, number>;
 }
 
 export function createInitialGameData(): GameData {
@@ -136,6 +137,7 @@ export function createInitialGameData(): GameData {
 		highScore: stored ? parseInt(stored, 10) : 0,
 		isBrewing: false,
 		brewProgress: 0,
+		brewsByRecipe: {},
 	};
 }
 

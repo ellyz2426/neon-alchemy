@@ -37,6 +37,10 @@
     font-size: 20;
     color: #a0c0ff;
   }
+  .diff-value {
+    font-size: 16;
+    color: #ff9966;
+  }
 </style>
 <Panel class="root">
   <div class="stat-group">
@@ -58,5 +62,9 @@
   <div class="stat-group">
     <div class="stat-label">LIVES</div>
     <div class="stat-value" id="lives">3</div>
+  </div>
+  <div class="stat-group">
+    <div class="stat-label">DIFFICULTY</div>
+    <div class="diff-value" id="difficulty">EASY</div>
   </div>
 </Panel>

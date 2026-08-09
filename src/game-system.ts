@@ -37,6 +37,15 @@ export class GameSystem extends createSystem({}) {
 	private brewTimer = 0;
 	private lastTimerWarn = 0;
 
+	// Camera shake
+	private shakeTimer = 0;
+	private shakeIntensity = 0;
+	private cameraBasePos = new Vector3();
+	private cameraInitialized = false;
+
+	// Cauldron panel flash
+	private cauldronFlashTimer = 0;
+
 	// Brewing animation
 	private brewParticles: { mesh: import('@iwsdk/core').Mesh; velocity: Vector3; life: number }[] = [];
 
@@ -152,10 +161,7 @@ export class GameSystem extends createSystem({}) {
 	}
 
 	private wireIngredientInteractions() {
-		// Create clickable entities for each ingredient shelf
-		// Since ingredients are Three.js meshes, we'll use raycasting in the InputSystem
-		// For now, ingredients are interacted through the environment positions
-		// We'll handle this via a simple distance-based click detection in update
+		// Ingredients are interacted via raycasting in InputSystem
 	}
 
 	private showState(state: GameData['state']) {
@@ -167,6 +173,9 @@ export class GameSystem extends createSystem({}) {
 		this.setPanelVisible('cauldron-panel', state === 'playing');
 		this.setPanelVisible('wave-complete-panel', state === 'wave_complete');
 		this.setPanelVisible('game-over-panel', state === 'game_over');
+
+		// Notify environment about playing state for rune animation
+		this.env.setPlaying(state === 'playing');
 	}
 
 	private updateMenuHighScore() {
@@ -175,6 +184,14 @@ export class GameSystem extends createSystem({}) {
 		panel.getElementById('highscore')?.setProperties({
 			text: `HIGH SCORE: ${this.data.highScore}`,
 		});
+	}
+
+	private getDifficultyLabel(wave: number): string {
+		if (wave <= 2) return 'EASY';
+		if (wave <= 4) return 'MEDIUM';
+		if (wave <= 6) return 'HARD';
+		if (wave <= 8) return 'EXTREME';
+		return 'MASTER';
 	}
 
 	private startGame() {
@@ -239,6 +256,9 @@ export class GameSystem extends createSystem({}) {
 			this.env.setCauldronColor(ingredient.color);
 		}
 
+		// Flash the cauldron panel
+		this.cauldronFlashTimer = 0.3;
+
 		this.updateCauldronPanel();
 	}
 
@@ -261,6 +281,9 @@ export class GameSystem extends createSystem({}) {
 		this.env.stopBrewingEffect();
 
 		if (recipe) {
+			// Track brews per recipe
+			this.data.brewsByRecipe[recipe.id] = (this.data.brewsByRecipe[recipe.id] || 0) + 1;
+
 			// Check if any order matches
 			const orderIdx = this.data.orders.findIndex((o) => o.recipeId === recipe.id);
 			if (orderIdx >= 0) {
@@ -283,19 +306,29 @@ export class GameSystem extends createSystem({}) {
 				this.audio.playBrewSuccess();
 				this.audio.playServe();
 				this.env.setCauldronColor(recipe.color);
+
+				// Spawn potion bottle + score popup
+				this.env.spawnPotionBottle(recipe.color);
+				this.env.spawnScorePopup(totalPoints);
 			} else {
 				// Valid potion but no matching order — partial points
-				this.data.score += Math.floor(recipe.points * 0.3);
-				this.data.waveScore += Math.floor(recipe.points * 0.3);
+				const partialPoints = Math.floor(recipe.points * 0.3);
+				this.data.score += partialPoints;
+				this.data.waveScore += partialPoints;
 				this.data.totalPotionsBrewed++;
 				this.data.combo = 0;
 				this.audio.playBrewSuccess();
+				this.env.spawnPotionBottle(recipe.color);
+				this.env.spawnScorePopup(partialPoints);
 			}
 		} else {
 			// Failed brew — dud
 			this.data.combo = 0;
 			this.audio.playBrewFail();
 			this.env.setCauldronColor(0x333333);
+
+			// Camera shake on fail
+			this.triggerCameraShake(0.3, 0.015);
 		}
 
 		this.data.cauldronIngredients = [];
@@ -307,6 +340,16 @@ export class GameSystem extends createSystem({}) {
 		setTimeout(() => {
 			this.env.setCauldronColor(0x8844cc);
 		}, 500);
+	}
+
+	private triggerCameraShake(duration: number, intensity: number) {
+		this.shakeTimer = duration;
+		this.shakeIntensity = intensity;
+		const world = this.world as World;
+		if (world.camera && !this.cameraInitialized) {
+			this.cameraBasePos.copy(world.camera.position);
+			this.cameraInitialized = true;
+		}
 	}
 
 	private clearCauldron() {
@@ -323,6 +366,9 @@ export class GameSystem extends createSystem({}) {
 		this.audio.playOrderExpired();
 		this.updateHUD();
 		this.updateOrdersPanel();
+
+		// Small camera shake on order expiry
+		this.triggerCameraShake(0.2, 0.008);
 
 		if (this.data.lives <= 0) {
 			this.endGame();
@@ -394,6 +440,14 @@ export class GameSystem extends createSystem({}) {
 		panel.getElementById('new-record')?.setProperties({
 			text: this.data.score >= this.data.highScore ? '★ NEW RECORD! ★' : '',
 		});
+
+		// Update per-recipe brew counts in game over panel
+		RECIPES.forEach((recipe, i) => {
+			const nameEl = panel.getElementById(`rstat-name-${i}`);
+			const countEl = panel.getElementById(`rstat-count-${i}`);
+			if (nameEl) nameEl.setProperties({ text: recipe.name });
+			if (countEl) countEl.setProperties({ text: `${this.data.brewsByRecipe[recipe.id] || 0}` });
+		});
 	}
 
 	private updateHUD() {
@@ -404,6 +458,7 @@ export class GameSystem extends createSystem({}) {
 		panel.getElementById('timer')?.setProperties({ text: `${Math.ceil(this.data.waveTimer)}` });
 		panel.getElementById('combo')?.setProperties({ text: `x${Math.max(1, this.data.combo)}` });
 		panel.getElementById('lives')?.setProperties({ text: `${this.data.lives}` });
+		panel.getElementById('difficulty')?.setProperties({ text: this.getDifficultyLabel(this.data.wave) });
 	}
 
 	private updateOrdersPanel() {
@@ -423,7 +478,7 @@ export class GameSystem extends createSystem({}) {
 				if (timerEl) {
 					const remaining = Math.ceil(order.timeRemaining);
 					const urgent = order.isUrgent || order.timeRemaining < order.timeLimit * 0.3;
-					if (timerEl) timerEl.setProperties({
+					timerEl.setProperties({
 						text: `${remaining}s${urgent ? ' ⚠' : ''}`,
 					});
 				}
@@ -475,7 +530,11 @@ export class GameSystem extends createSystem({}) {
 	}
 
 	update(delta: number, _time: number) {
-		if (this.data.state !== 'playing') return;
+		if (this.data.state !== 'playing') {
+			// Still process camera shake when not playing (e.g., transition)
+			this.updateCameraShake(delta);
+			return;
+		}
 
 		// Wave timer countdown
 		this.data.waveTimer -= delta;
@@ -520,9 +579,55 @@ export class GameSystem extends createSystem({}) {
 			}
 		}
 
+		// Camera shake
+		this.updateCameraShake(delta);
+
+		// Cauldron panel flash feedback
+		if (this.cauldronFlashTimer > 0) {
+			this.cauldronFlashTimer -= delta;
+			// Animate the cauldron panel's ingredient dots
+			const panel = this.getPanel('cauldron-panel');
+			if (panel) {
+				const slotCount = this.data.cauldronIngredients.length;
+				if (slotCount > 0) {
+					const dotEl = panel.getElementById(`sdot-${slotCount - 1}`);
+					if (dotEl) {
+						const flashIntensity = this.cauldronFlashTimer / 0.3;
+						const brightness = Math.floor(160 + flashIntensity * 95);
+						dotEl.setProperties({
+							backgroundColor: `rgba(${brightness}, ${Math.floor(brightness * 0.7)}, 255, ${0.4 + flashIntensity * 0.5})`,
+						});
+					}
+				}
+			}
+		}
+
 		// Check wave complete
 		if (this.checkWaveComplete()) {
 			this.completeWave();
+		}
+	}
+
+	private updateCameraShake(delta: number) {
+		if (this.shakeTimer <= 0) return;
+		this.shakeTimer -= delta;
+		const world = this.world as World;
+		if (!world.camera) return;
+
+		if (!this.cameraInitialized) {
+			this.cameraBasePos.copy(world.camera.position);
+			this.cameraInitialized = true;
+		}
+
+		if (this.shakeTimer > 0) {
+			const progress = this.shakeTimer / 0.3;
+			const shake = this.shakeIntensity * progress;
+			world.camera.position.x = this.cameraBasePos.x + (Math.random() - 0.5) * shake * 2;
+			world.camera.position.y = this.cameraBasePos.y + (Math.random() - 0.5) * shake;
+		} else {
+			// Reset camera position
+			world.camera.position.copy(this.cameraBasePos);
+			this.shakeTimer = 0;
 		}
 	}
 }
