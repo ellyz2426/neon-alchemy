@@ -41,6 +41,11 @@
     font-size: 16;
     color: #ff9966;
   }
+  .hint-text {
+    font-size: 11;
+    color: rgba(255, 220, 100, 0.8);
+    align-items: center;
+  }
 </style>
 <Panel class="root">
   <div class="stat-group">
@@ -67,4 +72,5 @@
     <div class="stat-label">DIFFICULTY</div>
     <div class="diff-value" id="difficulty">EASY</div>
   </div>
+  <div class="hint-text" id="hint"></div>
 </Panel>

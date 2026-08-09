@@ -159,3 +159,32 @@ export function getIngredientById(id: string): Ingredient | undefined {
 export function getRecipeById(id: string): PotionRecipe | undefined {
 	return RECIPES.find((r) => r.id === id);
 }
+
+/**
+ * Given current cauldron ingredients, find recipes that could still be completed.
+ * Returns recipe names that the current ingredients are a subset of.
+ */
+export function findPartialRecipeHints(currentIngredients: string[]): string[] {
+	if (currentIngredients.length === 0) return [];
+	const sorted = [...currentIngredients].sort();
+
+	const hints: string[] = [];
+	for (const recipe of RECIPES) {
+		const recipeSorted = [...recipe.ingredients].sort();
+		// Check if currentIngredients is a subset of recipe ingredients
+		let isSubset = true;
+		const remaining = [...recipeSorted];
+		for (const ing of sorted) {
+			const idx = remaining.indexOf(ing);
+			if (idx === -1) {
+				isSubset = false;
+				break;
+			}
+			remaining.splice(idx, 1);
+		}
+		if (isSubset) {
+			hints.push(recipe.name);
+		}
+	}
+	return hints;
+}

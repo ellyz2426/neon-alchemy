@@ -8,6 +8,7 @@ import {
 	getRecipeById,
 	INGREDIENTS,
 	RECIPES,
+	findPartialRecipeHints,
 } from './game-data.js';
 import { EnvironmentSystem } from './environment-system.js';
 import { AudioSystem } from './audio-system.js';
@@ -46,8 +47,10 @@ export class GameSystem extends createSystem({}) {
 	// Cauldron panel flash
 	private cauldronFlashTimer = 0;
 
-	// Brewing animation
-	private brewParticles: { mesh: import('@iwsdk/core').Mesh; velocity: Vector3; life: number }[] = [];
+	// Tutorial state
+	private tutorialStep = 0;
+	private tutorialTimer = 0;
+	private hasShownTutorial = false;
 
 	init() {
 		this.data = createInitialGameData();
@@ -208,6 +211,12 @@ export class GameSystem extends createSystem({}) {
 		this.tickTimer = 0;
 		this.lastTimerWarn = 0;
 
+		// Tutorial for first-time players
+		if (!this.hasShownTutorial) {
+			this.tutorialStep = 1;
+			this.tutorialTimer = 0;
+		}
+
 		this.showState('playing');
 		this.audio.startAmbient();
 		this.env.setBubblesActive(true);
@@ -250,6 +259,9 @@ export class GameSystem extends createSystem({}) {
 		this.audio.playIngredientAdd();
 		this.env.pulseIngredient(ingredientId);
 
+		// Fly ingredient to cauldron (visual effect)
+		this.env.flyIngredientToCauldron(ingredientId);
+
 		// Update cauldron color based on ingredients
 		const ingredient = getIngredientById(ingredientId);
 		if (ingredient) {
@@ -258,6 +270,12 @@ export class GameSystem extends createSystem({}) {
 
 		// Flash the cauldron panel
 		this.cauldronFlashTimer = 0.3;
+
+		// Advance tutorial
+		if (this.tutorialStep === 1) {
+			this.tutorialStep = 2;
+			this.tutorialTimer = 0;
+		}
 
 		this.updateCauldronPanel();
 	}
@@ -272,6 +290,12 @@ export class GameSystem extends createSystem({}) {
 		this.audio.playBubbling();
 		this.env.setBubblesActive(true);
 		this.env.startBrewingEffect();
+
+		// Advance tutorial
+		if (this.tutorialStep === 2) {
+			this.tutorialStep = 3;
+			this.tutorialTimer = 0;
+		}
 	}
 
 	private completeBrew() {
@@ -303,13 +327,14 @@ export class GameSystem extends createSystem({}) {
 				}
 
 				this.data.orders.splice(orderIdx, 1);
-				this.audio.playBrewSuccess();
+				this.audio.playBrewSuccess(this.data.combo);
 				this.audio.playServe();
 				this.env.setCauldronColor(recipe.color);
 
-				// Spawn potion bottle + score popup
+				// Spawn potion bottle + score popup + burst particles
 				this.env.spawnPotionBottle(recipe.color);
 				this.env.spawnScorePopup(totalPoints);
+				this.env.spawnBrewBurst(recipe.color);
 			} else {
 				// Valid potion but no matching order — partial points
 				const partialPoints = Math.floor(recipe.points * 0.3);
@@ -317,9 +342,15 @@ export class GameSystem extends createSystem({}) {
 				this.data.waveScore += partialPoints;
 				this.data.totalPotionsBrewed++;
 				this.data.combo = 0;
-				this.audio.playBrewSuccess();
+				this.audio.playBrewSuccess(1);
 				this.env.spawnPotionBottle(recipe.color);
 				this.env.spawnScorePopup(partialPoints);
+			}
+
+			// End tutorial after first successful brew
+			if (this.tutorialStep > 0) {
+				this.tutorialStep = 0;
+				this.hasShownTutorial = true;
 			}
 		} else {
 			// Failed brew — dud
@@ -459,6 +490,20 @@ export class GameSystem extends createSystem({}) {
 		panel.getElementById('combo')?.setProperties({ text: `x${Math.max(1, this.data.combo)}` });
 		panel.getElementById('lives')?.setProperties({ text: `${this.data.lives}` });
 		panel.getElementById('difficulty')?.setProperties({ text: this.getDifficultyLabel(this.data.wave) });
+
+		// Tutorial hint text
+		const hintEl = panel.getElementById('hint');
+		if (hintEl) {
+			let hintText = '';
+			if (this.tutorialStep === 1) {
+				hintText = 'Click ingredients on the shelves to add them';
+			} else if (this.tutorialStep === 2) {
+				hintText = 'Add more ingredients, then press BREW!';
+			} else if (this.tutorialStep === 3) {
+				hintText = 'Brewing... watch the cauldron!';
+			}
+			hintEl.setProperties({ text: hintText });
+		}
 	}
 
 	private updateOrdersPanel() {
@@ -522,6 +567,21 @@ export class GameSystem extends createSystem({}) {
 				statusEl.setProperties({ text: 'Ready to brew!' });
 			}
 		}
+
+		// Recipe hint — show which potions could be made
+		const hintEl = panel.getElementById('recipe-hint');
+		if (hintEl) {
+			if (this.data.cauldronIngredients.length > 0 && !this.data.isBrewing) {
+				const hints = findPartialRecipeHints(this.data.cauldronIngredients);
+				if (hints.length > 0) {
+					hintEl.setProperties({ text: `Possible: ${hints.join(', ')}` });
+				} else {
+					hintEl.setProperties({ text: 'No matching recipes' });
+				}
+			} else {
+				hintEl.setProperties({ text: '' });
+			}
+		}
 	}
 
 	// Public method for InputSystem to call
@@ -531,7 +591,7 @@ export class GameSystem extends createSystem({}) {
 
 	update(delta: number, _time: number) {
 		if (this.data.state !== 'playing') {
-			// Still process camera shake when not playing (e.g., transition)
+			// Still process camera shake when not playing
 			this.updateCameraShake(delta);
 			return;
 		}
@@ -585,7 +645,6 @@ export class GameSystem extends createSystem({}) {
 		// Cauldron panel flash feedback
 		if (this.cauldronFlashTimer > 0) {
 			this.cauldronFlashTimer -= delta;
-			// Animate the cauldron panel's ingredient dots
 			const panel = this.getPanel('cauldron-panel');
 			if (panel) {
 				const slotCount = this.data.cauldronIngredients.length;
@@ -600,6 +659,17 @@ export class GameSystem extends createSystem({}) {
 					}
 				}
 			}
+		}
+
+		// Tutorial timer
+		if (this.tutorialStep > 0) {
+			this.tutorialTimer += delta;
+			// Auto-dismiss tutorial after 15 seconds
+			if (this.tutorialTimer > 15) {
+				this.tutorialStep = 0;
+				this.hasShownTutorial = true;
+			}
+			this.updateHUD();
 		}
 
 		// Check wave complete

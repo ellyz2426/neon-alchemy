@@ -92,11 +92,13 @@ export class AudioSystem extends createSystem({}) {
 		}
 	}
 
-	playBrewSuccess() {
+	playBrewSuccess(combo: number = 1) {
 		this.ensureAudioCtx();
 		if (!this.audioCtx || !this.masterGain) return;
 		const now = this.audioCtx.currentTime;
-		const notes = [523, 659, 784, 1047];
+		// Scale pitch with combo — higher combos = higher notes
+		const pitchMult = 1 + Math.min(combo - 1, 5) * 0.08;
+		const notes = [523, 659, 784, 1047].map((n) => n * pitchMult);
 		notes.forEach((freq, i) => {
 			const osc = this.audioCtx!.createOscillator();
 			const gain = this.audioCtx!.createGain();
