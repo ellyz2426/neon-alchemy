@@ -54,6 +54,10 @@ export class GameSystem extends createSystem({}) {
 	private tutorialTimer = 0;
 	private hasShownTutorial = false;
 
+	// Golden ingredient bonus
+	private goldenTimer = 0;
+	private goldenInterval = 20; // seconds between golden spawns
+
 	init() {
 		this.data = createInitialGameData();
 		const world = this.world as World;
@@ -188,6 +192,9 @@ export class GameSystem extends createSystem({}) {
 		if (!panel) return;
 		panel.getElementById('highscore')?.setProperties({
 			text: `HIGH SCORE: ${this.data.highScore}`,
+		});
+		panel.getElementById('best-wave')?.setProperties({
+			text: this.data.bestWave > 0 ? `Best Wave: ${this.data.bestWave}` : '',
 		});
 	}
 
@@ -330,7 +337,9 @@ export class GameSystem extends createSystem({}) {
 				if (this.data.combo > this.data.bestCombo) this.data.bestCombo = this.data.combo;
 				const comboMultiplier = 1 + (this.data.combo - 1) * 0.25;
 				const doubleMultiplier = this.data.activePowerUp?.type === 'double_points' ? 2 : 1;
-				const totalPoints = Math.floor(points * comboMultiplier * doubleMultiplier);
+				// Golden ingredient bonus: 50% extra if any ingredient was golden
+				const goldenBonus = this.data.cauldronIngredients.some((id) => this.env.isGoldenIngredient(id)) ? 1.5 : 1;
+				const totalPoints = Math.floor(points * comboMultiplier * doubleMultiplier * goldenBonus);
 				this.data.score += totalPoints;
 				this.data.waveScore += totalPoints;
 				this.data.potionsBrewed++;
@@ -536,6 +545,13 @@ export class GameSystem extends createSystem({}) {
 			this.data.highScore = this.data.score;
 			try {
 				localStorage.setItem('neon-alchemy-highscore', String(this.data.highScore));
+			} catch {}
+		}
+		// Save best wave
+		if (this.data.wave > this.data.bestWave) {
+			this.data.bestWave = this.data.wave;
+			try {
+				localStorage.setItem('neon-alchemy-bestwave', String(this.data.bestWave));
 			} catch {}
 		}
 
@@ -792,6 +808,15 @@ export class GameSystem extends createSystem({}) {
 				this.data.activePowerUp = null;
 			}
 			this.updateHUD();
+		}
+
+		// Golden ingredient timer
+		this.goldenTimer -= delta;
+		if (this.goldenTimer <= 0) {
+			this.goldenTimer = this.goldenInterval - Math.min(this.data.wave, 5);
+			const ids = INGREDIENTS.map((i) => i.id);
+			const randomId = ids[Math.floor(Math.random() * ids.length)];
+			this.env.setGoldenIngredient(randomId, 10); // golden for 10 seconds
 		}
 
 		// Check wave complete

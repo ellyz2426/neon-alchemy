@@ -166,10 +166,12 @@ export interface GameData {
 	brewsByRecipe: Record<string, number>;
 	activePowerUp: PowerUp | null;
 	powerUpsUsed: number;
+	bestWave: number;
 }
 
 export function createInitialGameData(): GameData {
 	const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('neon-alchemy-highscore') : null;
+	const storedWave = typeof localStorage !== 'undefined' ? localStorage.getItem('neon-alchemy-bestwave') : null;
 	return {
 		state: 'menu',
 		score: 0,
@@ -191,6 +193,7 @@ export function createInitialGameData(): GameData {
 		brewsByRecipe: {},
 		activePowerUp: null,
 		powerUpsUsed: 0,
+		bestWave: storedWave ? parseInt(storedWave, 10) : 0,
 	};
 }
 

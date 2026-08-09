@@ -144,6 +144,11 @@ export class EnvironmentSystem extends createSystem({}) {
 	private ingredientCooldowns: Map<string, number> = new Map();
 	private ingredientCooldownSparkles: Map<string, Mesh> = new Map();
 
+	// Golden ingredient bonus
+	private goldenIngredientId: string | null = null;
+	private goldenTimer = 0;
+	private goldenLight: PointLight | null = null;
+
 	// Patron spirits
 	private patronSpirits: PatronSpirit[] = [];
 
@@ -1283,13 +1288,9 @@ export class EnvironmentSystem extends createSystem({}) {
 		this.currentLives = lives;
 		for (let i = 0; i < this.lifeOrbs.length; i++) {
 			const orb = this.lifeOrbs[i];
-			// Orbs are indexed 0, 1, 2 representing lives 3, 2, 1
-			// Orb 0 = 3rd life, Orb 1 = 2nd life, Orb 2 = 1st life
-			// So orb i is active if lives > (2 - i) => i < lives
 			const shouldBeActive = i < lives;
 			if (!shouldBeActive && orb.active) {
 				orb.active = false;
-				// Immediate shrink start — animation handled in update
 			} else if (shouldBeActive && !orb.active) {
 				orb.active = true;
 				orb.mesh.scale.set(1, 1, 1);
@@ -1298,6 +1299,36 @@ export class EnvironmentSystem extends createSystem({}) {
 				orb.light.intensity = 0.4;
 			}
 		}
+	}
+
+	setGoldenIngredient(id: string | null, duration: number) {
+		// Clear previous golden
+		if (this.goldenIngredientId && this.goldenIngredientId !== id) {
+			const prev = this.ingredientShelves.get(this.goldenIngredientId);
+			if (prev) {
+				(prev.mesh.material as MeshStandardMaterial).emissiveIntensity = 0.6;
+			}
+		}
+		if (this.goldenLight) {
+			(this.world as World).scene.remove(this.goldenLight);
+			this.goldenLight = null;
+		}
+		this.goldenIngredientId = id;
+		this.goldenTimer = duration;
+
+		if (id) {
+			const shelf = this.ingredientShelves.get(id);
+			if (shelf) {
+				this.goldenLight = new PointLight(0xffdd44, 1.5, 2.5);
+				this.goldenLight.position.copy(shelf.mesh.position);
+				this.goldenLight.position.y += 0.2;
+				(this.world as World).scene.add(this.goldenLight);
+			}
+		}
+	}
+
+	isGoldenIngredient(id: string): boolean {
+		return this.goldenIngredientId === id && this.goldenTimer > 0;
 	}
 
 	spawnPotionBottle(color: number) {
@@ -1477,6 +1508,41 @@ export class EnvironmentSystem extends createSystem({}) {
 				data.label.position.y += Math.sin(this.elapsedTime * 1.5) * 0.0002;
 			}
 		});
+
+		// Golden ingredient glow animation
+		if (this.goldenIngredientId && this.goldenTimer > 0) {
+			this.goldenTimer -= delta;
+			const shelf = this.ingredientShelves.get(this.goldenIngredientId);
+			if (shelf) {
+				const pulse = 0.8 + Math.sin(this.elapsedTime * 5) * 0.4;
+				const gMat = shelf.mesh.material as MeshStandardMaterial;
+				gMat.emissive.set(0xffdd44);
+				gMat.emissiveIntensity = 1.0 + pulse;
+				shelf.light.color.set(0xffdd44);
+				shelf.light.intensity = 1.5 + pulse;
+			}
+			if (this.goldenLight) {
+				this.goldenLight.intensity = 1.0 + Math.sin(this.elapsedTime * 4) * 0.5;
+			}
+			if (this.goldenTimer <= 0) {
+				// Expire golden
+				if (shelf) {
+					const ingr = INGREDIENTS.find((i) => i.id === this.goldenIngredientId);
+					if (ingr) {
+						const sMat = shelf.mesh.material as MeshStandardMaterial;
+						sMat.emissive.set(ingr.glowColor);
+						sMat.emissiveIntensity = 0.6;
+						shelf.light.color.set(ingr.glowColor);
+						shelf.light.intensity = 0.5;
+					}
+				}
+				if (this.goldenLight) {
+					(this.world as World).scene.remove(this.goldenLight);
+					this.goldenLight = null;
+				}
+				this.goldenIngredientId = null;
+			}
+		}
 
 		// Rune pulsing (wave: faster pulse, combo 7+: faster rotation)
 		const runePulseSpeed = 2 + Math.min((this.waveLevel - 1) / 4, 2) * 1.5;

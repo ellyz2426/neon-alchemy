@@ -3,7 +3,7 @@
     flex-direction: column;
     align-items: center;
     padding: 32;
-    gap: 16;
+    gap: 14;
     background-color: rgba(10, 5, 25, 0.94);
     border-radius: 16;
     border-color: rgba(180, 100, 255, 0.4);
@@ -13,12 +13,26 @@
   .title {
     font-size: 36;
     color: #d4a0ff;
-    margin-bottom: 8;
+    margin-bottom: 4;
   }
   .subtitle {
     font-size: 14;
     color: rgba(200, 160, 255, 0.6);
-    margin-bottom: 16;
+    margin-bottom: 8;
+  }
+  .info-row {
+    flex-direction: row;
+    gap: 24;
+    align-items: center;
+    margin-bottom: 6;
+  }
+  .info-label {
+    font-size: 11;
+    color: rgba(200, 160, 255, 0.4);
+  }
+  .info-val {
+    font-size: 13;
+    color: #e0c0ff;
   }
   .btn {
     padding: 14;
@@ -37,12 +51,17 @@
   .highscore-label {
     font-size: 12;
     color: rgba(200, 160, 255, 0.5);
-    margin-top: 8;
+    margin-top: 4;
   }
 </style>
 <Panel class="root">
   <div class="title" id="title">NEON ALCHEMY</div>
   <div class="subtitle">Potion Brewing Arcade</div>
+  <div class="info-row">
+    <div class="info-label">11 INGREDIENTS</div>
+    <div class="info-label">11 RECIPES</div>
+    <div class="info-label">3 POWER-UPS</div>
+  </div>
   <div class="btn" id="btn-play">
     <div class="btn-text">BREW</div>
   </div>
@@ -50,4 +69,5 @@
     <div class="btn-text">RECIPE BOOK</div>
   </div>
   <div class="highscore-label" id="highscore">HIGH SCORE: 0</div>
+  <div class="info-val" id="best-wave"></div>
 </Panel>
