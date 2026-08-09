@@ -59,6 +59,21 @@ interface BrewBurst {
 	maxLife: number;
 }
 
+interface PatronSpirit {
+	body: Mesh;
+	tail: Mesh;
+	light: PointLight;
+	basePos: Vector3;
+	state: 'idle' | 'active' | 'fulfilled' | 'expired';
+	animTimer: number;
+}
+
+interface CompletedBottle {
+	group: Group;
+	targetX: number;
+	currentX: number;
+}
+
 export class EnvironmentSystem extends createSystem({}) {
 	private cauldronGroup!: Group;
 	private cauldronLiquid!: Mesh;
@@ -125,6 +140,22 @@ export class EnvironmentSystem extends createSystem({}) {
 	private lifeOrbs: { mesh: Mesh; light: PointLight; baseY: number; active: boolean }[] = [];
 	private currentLives = 3;
 
+	// Ingredient cooldowns
+	private ingredientCooldowns: Map<string, number> = new Map();
+	private ingredientCooldownSparkles: Map<string, Mesh> = new Map();
+
+	// Patron spirits
+	private patronSpirits: PatronSpirit[] = [];
+
+	// Completed potions shelf
+	private completedBottles: CompletedBottle[] = [];
+
+	// Wave transition
+	private waveTransitionTimer = 0;
+
+	// Cauldron liquid stirring
+	private cauldronLiquidOverlay: Mesh | null = null;
+
 	init() {
 		this.buildWorkshop();
 		this.buildCauldron();
@@ -137,6 +168,8 @@ export class EnvironmentSystem extends createSystem({}) {
 		this.buildMysticalArch();
 		this.buildCobwebs();
 		this.buildLifeOrbs();
+		this.buildPatronSpirits();
+		this.buildCauldronLiquidOverlay();
 	}
 
 	private buildWorkshop() {
@@ -986,6 +1019,170 @@ export class EnvironmentSystem extends createSystem({}) {
 		}
 	}
 
+	private buildPatronSpirits() {
+		const world = this.world as World;
+		// 3 spirits near the orders panel area (left side)
+		const spiritPositions: [number, number, number][] = [
+			[-2.2, 2.0, -1.5],
+			[-2.0, 2.3, -0.8],
+			[-1.8, 1.9, -0.2],
+		];
+
+		for (const [x, y, z] of spiritPositions) {
+			// Semi-transparent glowing sphere body
+			const body = new Mesh(
+				new SphereGeometry(0.08, 12, 8),
+				new MeshStandardMaterial({
+					color: 0x88ccff,
+					emissive: 0x4488cc,
+					emissiveIntensity: 0.8,
+					transparent: true,
+					opacity: 0.35,
+				})
+			);
+			body.position.set(x, y, z);
+			world.scene.add(body);
+
+			// Wispy tail (cone below)
+			const tail = new Mesh(
+				new ConeGeometry(0.04, 0.18, 6),
+				new MeshStandardMaterial({
+					color: 0x6699cc,
+					emissive: 0x3366aa,
+					emissiveIntensity: 0.6,
+					transparent: true,
+					opacity: 0.25,
+				})
+			);
+			tail.position.set(x, y - 0.14, z);
+			tail.rotation.x = Math.PI; // point downward
+			world.scene.add(tail);
+
+			const light = new PointLight(0x88ccff, 0.2, 1.5);
+			light.position.set(x, y, z);
+			world.scene.add(light);
+
+			this.patronSpirits.push({
+				body,
+				tail,
+				light,
+				basePos: new Vector3(x, y, z),
+				state: 'idle',
+				animTimer: 0,
+			});
+		}
+	}
+
+	private buildCauldronLiquidOverlay() {
+		// Second liquid mesh that rotates opposite direction for stirring effect
+		this.cauldronLiquidOverlay = new Mesh(
+			new RingGeometry(0.1, 0.38, 12),
+			new MeshStandardMaterial({
+				color: 0x9955dd,
+				emissive: 0x7733bb,
+				emissiveIntensity: 0.4,
+				transparent: true,
+				opacity: 0,
+				side: DoubleSide,
+			})
+		);
+		this.cauldronLiquidOverlay.rotation.x = -Math.PI / 2;
+		this.cauldronLiquidOverlay.position.set(0, 0.73, 0);
+		this.cauldronGroup.add(this.cauldronLiquidOverlay);
+	}
+
+	// --- Cooldown methods ---
+	startIngredientCooldown(id: string) {
+		this.ingredientCooldowns.set(id, 0.5);
+		// Shrink the ingredient orb
+		const shelf = this.ingredientShelves.get(id);
+		if (shelf) {
+			shelf.mesh.scale.set(0.3, 0.3, 0.3);
+			shelf.light.intensity = 0.1;
+		}
+	}
+
+	isIngredientOnCooldown(id: string): boolean {
+		const timer = this.ingredientCooldowns.get(id);
+		return timer !== undefined && timer > 0;
+	}
+
+	// --- Patron spirit methods ---
+	setSpiritState(index: number, state: PatronSpirit['state']) {
+		if (index < 0 || index >= this.patronSpirits.length) return;
+		const spirit = this.patronSpirits[index];
+		spirit.state = state;
+		spirit.animTimer = 0;
+	}
+
+	// --- Completed potions shelf ---
+	addCompletedBottle(color: number) {
+		const world = this.world as World;
+		const group = new Group();
+		const potionColor = new Color(color);
+
+		const bottleBody = new Mesh(
+			new CylinderGeometry(0.015, 0.02, 0.06, 6),
+			new MeshStandardMaterial({
+				color: potionColor,
+				emissive: potionColor,
+				emissiveIntensity: 0.6,
+				transparent: true,
+				opacity: 0.85,
+			})
+		);
+		group.add(bottleBody);
+
+		const bottleNeck = new Mesh(
+			new CylinderGeometry(0.008, 0.012, 0.025, 5),
+			new MeshStandardMaterial({
+				color: potionColor,
+				emissive: potionColor,
+				emissiveIntensity: 0.4,
+				transparent: true,
+				opacity: 0.8,
+			})
+		);
+		bottleNeck.position.y = 0.04;
+		group.add(bottleNeck);
+
+		const bottleCork = new Mesh(
+			new CylinderGeometry(0.01, 0.009, 0.012, 5),
+			new MeshStandardMaterial({ color: 0x8a6040 })
+		);
+		bottleCork.position.y = 0.058;
+		group.add(bottleCork);
+
+		// Slide existing bottles to make room
+		const spacing = 0.12;
+		const startX = -0.24;
+
+		// Add new bottle at the rightmost slot
+		const slotIndex = Math.min(this.completedBottles.length, 4);
+		const targetX = startX + slotIndex * spacing;
+
+		group.position.set(targetX, 0.92, -2.8);
+		world.scene.add(group);
+
+		// If we have 5, remove the oldest
+		if (this.completedBottles.length >= 5) {
+			const oldest = this.completedBottles.shift()!;
+			world.scene.remove(oldest.group);
+		}
+
+		// Shift existing bottles left
+		this.completedBottles.forEach((b, i) => {
+			b.targetX = startX + i * spacing;
+		});
+
+		this.completedBottles.push({ group, targetX, currentX: targetX });
+	}
+
+	// --- Wave transition ---
+	triggerWaveTransition() {
+		this.waveTransitionTimer = 2.0;
+	}
+
 	setWaveLevel(wave: number) {
 		this.waveLevel = wave;
 
@@ -1417,6 +1614,168 @@ export class EnvironmentSystem extends createSystem({}) {
 				const world = this.world as World;
 				world.scene.remove(popup.mesh);
 				this.scorePopups.splice(i, 1);
+			}
+		}
+
+		// Ingredient cooldowns
+		this.ingredientCooldowns.forEach((timer, id) => {
+			if (timer > 0) {
+				const remaining = timer - delta;
+				this.ingredientCooldowns.set(id, remaining);
+				const shelf = this.ingredientShelves.get(id);
+				if (shelf) {
+					if (remaining <= 0) {
+						// Cooldown finished — regrow with sparkle
+						shelf.mesh.scale.set(1, 1, 1);
+						shelf.light.intensity = 1.5;
+						const shelfMat = shelf.mesh.material as MeshStandardMaterial;
+						shelfMat.emissiveIntensity = 1.5;
+						// Brief bright pulse that fades naturally via normal update
+						this.ingredientCooldowns.delete(id);
+					} else {
+						// During cooldown — scale grows back gradually
+						const progress = 1 - remaining / 0.5;
+						const s = 0.3 + progress * 0.7;
+						shelf.mesh.scale.set(s, s, s);
+						shelf.light.intensity = 0.1 + progress * 0.4;
+					}
+				}
+			}
+		});
+
+		// Patron spirits animation
+		this.patronSpirits.forEach((spirit) => {
+			spirit.animTimer += delta;
+			const bodyMat = spirit.body.material as MeshStandardMaterial;
+			const tailMat = spirit.tail.material as MeshStandardMaterial;
+
+			switch (spirit.state) {
+				case 'idle':
+					// Gentle bob, dim
+					spirit.body.position.y = spirit.basePos.y + Math.sin(this.elapsedTime * 1.2 + spirit.basePos.x * 3) * 0.05;
+					spirit.tail.position.y = spirit.body.position.y - 0.14;
+					spirit.light.position.y = spirit.body.position.y;
+					bodyMat.opacity = MathUtils.lerp(bodyMat.opacity, 0.2, delta * 3);
+					bodyMat.emissiveIntensity = MathUtils.lerp(bodyMat.emissiveIntensity, 0.4, delta * 3);
+					tailMat.opacity = MathUtils.lerp(tailMat.opacity, 0.12, delta * 3);
+					spirit.light.intensity = MathUtils.lerp(spirit.light.intensity, 0.1, delta * 3);
+					break;
+
+				case 'active':
+					// Brighter glow, active bob
+					spirit.body.position.y = spirit.basePos.y + Math.sin(this.elapsedTime * 2 + spirit.basePos.x * 3) * 0.06;
+					spirit.tail.position.y = spirit.body.position.y - 0.14;
+					spirit.light.position.y = spirit.body.position.y;
+					bodyMat.opacity = MathUtils.lerp(bodyMat.opacity, 0.55, delta * 4);
+					bodyMat.emissiveIntensity = 1.0 + Math.sin(this.elapsedTime * 3) * 0.3;
+					tailMat.opacity = MathUtils.lerp(tailMat.opacity, 0.35, delta * 4);
+					spirit.light.intensity = MathUtils.lerp(spirit.light.intensity, 0.5, delta * 4);
+					// Subtle color pulse
+					bodyMat.emissive.setHSL(0.55 + Math.sin(this.elapsedTime * 2) * 0.05, 0.6, 0.45);
+					break;
+
+				case 'fulfilled': {
+					// Spin + ascend + fade (over 1.5s)
+					const t = spirit.animTimer;
+					if (t < 1.5) {
+						spirit.body.position.y = spirit.basePos.y + t * 0.6;
+						spirit.tail.position.y = spirit.body.position.y - 0.14;
+						spirit.light.position.y = spirit.body.position.y;
+						spirit.body.rotation.y += delta * 8;
+						spirit.tail.rotation.y += delta * 8;
+						bodyMat.emissive.set(0x44ffaa);
+						bodyMat.emissiveIntensity = 2.0 - t * 0.8;
+						bodyMat.opacity = Math.max(0, 0.7 - t * 0.5);
+						tailMat.opacity = Math.max(0, 0.4 - t * 0.3);
+						spirit.light.intensity = Math.max(0, 0.8 - t * 0.5);
+						spirit.light.color.set(0x44ffaa);
+					} else {
+						bodyMat.opacity = 0;
+						tailMat.opacity = 0;
+						spirit.light.intensity = 0;
+						spirit.state = 'idle';
+						spirit.body.position.copy(spirit.basePos);
+						spirit.tail.position.set(spirit.basePos.x, spirit.basePos.y - 0.14, spirit.basePos.z);
+						spirit.body.rotation.y = 0;
+						spirit.tail.rotation.y = 0;
+						bodyMat.emissive.set(0x4488cc);
+						spirit.light.color.set(0x88ccff);
+					}
+					break;
+				}
+
+				case 'expired': {
+					// Flash red + fade (over 1s)
+					const t2 = spirit.animTimer;
+					if (t2 < 1.0) {
+						const flash = Math.sin(t2 * 20) > 0 ? 1 : 0.3;
+						bodyMat.emissive.set(0xff2222);
+						bodyMat.emissiveIntensity = flash * 2;
+						bodyMat.opacity = Math.max(0, 0.6 - t2 * 0.6);
+						tailMat.opacity = Math.max(0, 0.3 - t2 * 0.3);
+						spirit.light.intensity = flash * 0.6;
+						spirit.light.color.set(0xff4444);
+					} else {
+						bodyMat.opacity = 0;
+						tailMat.opacity = 0;
+						spirit.light.intensity = 0;
+						spirit.state = 'idle';
+						spirit.body.position.copy(spirit.basePos);
+						spirit.tail.position.set(spirit.basePos.x, spirit.basePos.y - 0.14, spirit.basePos.z);
+						bodyMat.emissive.set(0x4488cc);
+						spirit.light.color.set(0x88ccff);
+					}
+					break;
+				}
+			}
+		});
+
+		// Completed potions shelf — slide bottles to targets
+		this.completedBottles.forEach((b) => {
+			if (Math.abs(b.currentX - b.targetX) > 0.001) {
+				b.currentX = MathUtils.lerp(b.currentX, b.targetX, delta * 8);
+				b.group.position.x = b.currentX;
+			}
+		});
+
+		// Wave transition effect
+		if (this.waveTransitionTimer > 0) {
+			this.waveTransitionTimer -= delta;
+			const t = this.waveTransitionTimer;
+			// Bright flash on magic circle (first 0.5s most intense)
+			const flashIntensity = t > 1.5 ? (2 - t) * 8 : (t > 1.0 ? 2.0 : t * 2);
+			const outerMat = this.magicCircleOuter.material as MeshStandardMaterial;
+			outerMat.emissiveIntensity = 0.3 + flashIntensity;
+			outerMat.emissive.setHSL(0.75 + Math.sin(this.elapsedTime * 10) * 0.05, 0.8, 0.6);
+			const innerMat = this.magicCircleInner.material as MeshStandardMaterial;
+			innerMat.emissiveIntensity = 0.4 + flashIntensity * 1.2;
+
+			// Runes spin faster during transition
+			this.runeSymbols.forEach((rune) => {
+				rune.rotation.y += delta * 3.0; // extra speed on top of normal rotation
+			});
+
+			if (this.waveTransitionTimer <= 0) {
+				// Reset
+				outerMat.emissive.set(0x331166);
+				this.waveTransitionTimer = 0;
+			}
+		}
+
+		// Cauldron liquid stirring during brewing
+		if (this.cauldronLiquidOverlay) {
+			const overlayMat = this.cauldronLiquidOverlay.material as MeshStandardMaterial;
+			if (this.isBrewing) {
+				// Show overlay and rotate both liquid meshes
+				overlayMat.opacity = MathUtils.lerp(overlayMat.opacity, 0.3, delta * 3);
+				overlayMat.color.copy(this.liquidColor).multiplyScalar(0.7);
+				overlayMat.emissive.copy(this.liquidColor).multiplyScalar(0.3);
+				this.cauldronLiquid.rotation.y += delta * 1.2; // stir one way
+				this.cauldronLiquidOverlay.rotation.z += delta * 0.8; // spiral counter-rotate (z since x is flipped)
+			} else {
+				overlayMat.opacity = MathUtils.lerp(overlayMat.opacity, 0, delta * 5);
+				// Slowly stop rotation
+				this.cauldronLiquid.rotation.y *= 0.95;
 			}
 		}
 	}

@@ -235,6 +235,38 @@ export class AudioSystem extends createSystem({}) {
 		osc.stop(this.audioCtx.currentTime + 0.08);
 	}
 
+	playWaveTransition() {
+		this.ensureAudioCtx();
+		if (!this.audioCtx || !this.masterGain) return;
+		const now = this.audioCtx.currentTime;
+		// Ascending "charging up" tone — sweeps from low to high
+		const osc = this.audioCtx.createOscillator();
+		const gain = this.audioCtx.createGain();
+		osc.type = 'sine';
+		osc.frequency.setValueAtTime(200, now);
+		osc.frequency.exponentialRampToValueAtTime(1200, now + 0.8);
+		gain.gain.setValueAtTime(0.08, now);
+		gain.gain.setValueAtTime(0.1, now + 0.4);
+		gain.gain.exponentialRampToValueAtTime(0.001, now + 1.0);
+		osc.connect(gain);
+		gain.connect(this.masterGain);
+		osc.start();
+		osc.stop(now + 1.0);
+
+		// Harmonic shimmer
+		const osc2 = this.audioCtx.createOscillator();
+		const gain2 = this.audioCtx.createGain();
+		osc2.type = 'triangle';
+		osc2.frequency.setValueAtTime(400, now + 0.1);
+		osc2.frequency.exponentialRampToValueAtTime(2400, now + 0.9);
+		gain2.gain.setValueAtTime(0.04, now + 0.1);
+		gain2.gain.exponentialRampToValueAtTime(0.001, now + 1.0);
+		osc2.connect(gain2);
+		gain2.connect(this.masterGain);
+		osc2.start(now + 0.1);
+		osc2.stop(now + 1.0);
+	}
+
 	update(_delta: number, _time: number) {
 		// No per-frame updates needed
 	}

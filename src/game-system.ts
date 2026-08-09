@@ -253,16 +253,21 @@ export class GameSystem extends createSystem({}) {
 		this.data.orders.push(order);
 		this.updateOrdersPanel();
 		this.updateNeededIngredients();
+		// Activate spirit for this order slot
+		this.env.setSpiritState(this.data.orders.length - 1, 'active');
 	}
 
 	private addIngredient(ingredientId: string) {
 		if (this.data.state !== 'playing') return;
 		if (this.data.cauldronIngredients.length >= 3) return;
 		if (this.data.isBrewing) return;
+		// Cooldown check
+		if (this.env.isIngredientOnCooldown(ingredientId)) return;
 
 		this.data.cauldronIngredients.push(ingredientId);
 		this.audio.playIngredientAdd();
 		this.env.pulseIngredient(ingredientId);
+		this.env.startIngredientCooldown(ingredientId);
 
 		// Fly ingredient to cauldron (visual effect)
 		this.env.flyIngredientToCauldron(ingredientId);
@@ -341,6 +346,9 @@ export class GameSystem extends createSystem({}) {
 				this.env.spawnPotionBottle(recipe.color);
 				this.env.spawnScorePopup(totalPoints);
 				this.env.spawnBrewBurst(recipe.color);
+				this.env.addCompletedBottle(recipe.color);
+				// Spirit fulfilled for this order
+				this.env.setSpiritState(orderIdx, 'fulfilled');
 			} else {
 				// Valid potion but no matching order — partial points
 				const partialPoints = Math.floor(recipe.points * 0.3);
@@ -352,6 +360,7 @@ export class GameSystem extends createSystem({}) {
 				this.audio.playBrewSuccess(1);
 				this.env.spawnPotionBottle(recipe.color);
 				this.env.spawnScorePopup(partialPoints);
+				this.env.addCompletedBottle(recipe.color);
 			}
 
 			// End tutorial after first successful brew
@@ -400,6 +409,8 @@ export class GameSystem extends createSystem({}) {
 	}
 
 	private handleOrderExpired(index: number) {
+		// Trigger spirit expiration before removing order
+		this.env.setSpiritState(index, 'expired');
 		this.data.orders.splice(index, 1);
 		this.data.lives--;
 		this.data.combo = 0;
@@ -457,6 +468,9 @@ export class GameSystem extends createSystem({}) {
 		this.env.setWaveLevel(this.data.wave);
 		this.env.setComboLevel(0);
 		this.env.setNeededIngredients([]);
+		// Wave transition effect
+		this.env.triggerWaveTransition();
+		this.audio.playWaveTransition();
 		this.updateHUD();
 		this.updateOrdersPanel();
 		this.updateCauldronPanel();
