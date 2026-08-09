@@ -221,6 +221,10 @@ export class GameSystem extends createSystem({}) {
 		this.audio.startAmbient();
 		this.env.setBubblesActive(true);
 		this.env.setCauldronColor(0x8844cc);
+		this.env.setWaveLevel(1);
+		this.env.setComboLevel(0);
+		this.env.setLives(3);
+		this.env.setNeededIngredients([]);
 		this.updateHUD();
 		this.updateOrdersPanel();
 		this.updateCauldronPanel();
@@ -248,6 +252,7 @@ export class GameSystem extends createSystem({}) {
 
 		this.data.orders.push(order);
 		this.updateOrdersPanel();
+		this.updateNeededIngredients();
 	}
 
 	private addIngredient(ingredientId: string) {
@@ -330,6 +335,7 @@ export class GameSystem extends createSystem({}) {
 				this.audio.playBrewSuccess(this.data.combo);
 				this.audio.playServe();
 				this.env.setCauldronColor(recipe.color);
+				this.env.setComboLevel(this.data.combo);
 
 				// Spawn potion bottle + score popup + burst particles
 				this.env.spawnPotionBottle(recipe.color);
@@ -342,6 +348,7 @@ export class GameSystem extends createSystem({}) {
 				this.data.waveScore += partialPoints;
 				this.data.totalPotionsBrewed++;
 				this.data.combo = 0;
+				this.env.setComboLevel(0);
 				this.audio.playBrewSuccess(1);
 				this.env.spawnPotionBottle(recipe.color);
 				this.env.spawnScorePopup(partialPoints);
@@ -355,6 +362,7 @@ export class GameSystem extends createSystem({}) {
 		} else {
 			// Failed brew — dud
 			this.data.combo = 0;
+			this.env.setComboLevel(0);
 			this.audio.playBrewFail();
 			this.env.setCauldronColor(0x333333);
 
@@ -366,6 +374,7 @@ export class GameSystem extends createSystem({}) {
 		this.updateHUD();
 		this.updateOrdersPanel();
 		this.updateCauldronPanel();
+		this.updateNeededIngredients();
 
 		// Reset cauldron color after delay
 		setTimeout(() => {
@@ -394,9 +403,12 @@ export class GameSystem extends createSystem({}) {
 		this.data.orders.splice(index, 1);
 		this.data.lives--;
 		this.data.combo = 0;
+		this.env.setComboLevel(0);
+		this.env.setLives(this.data.lives);
 		this.audio.playOrderExpired();
 		this.updateHUD();
 		this.updateOrdersPanel();
+		this.updateNeededIngredients();
 
 		// Small camera shake on order expiry
 		this.triggerCameraShake(0.2, 0.008);
@@ -442,6 +454,9 @@ export class GameSystem extends createSystem({}) {
 		this.showState('playing');
 		this.env.setBubblesActive(true);
 		this.env.setCauldronColor(0x8844cc);
+		this.env.setWaveLevel(this.data.wave);
+		this.env.setComboLevel(0);
+		this.env.setNeededIngredients([]);
 		this.updateHUD();
 		this.updateOrdersPanel();
 		this.updateCauldronPanel();
@@ -587,6 +602,21 @@ export class GameSystem extends createSystem({}) {
 	// Public method for InputSystem to call
 	handleIngredientClick(ingredientId: string) {
 		this.addIngredient(ingredientId);
+	}
+
+	private updateNeededIngredients() {
+		const neededIds: string[] = [];
+		for (const order of this.data.orders) {
+			const recipe = getRecipeById(order.recipeId);
+			if (recipe) {
+				for (const id of recipe.ingredients) {
+					if (!neededIds.includes(id)) {
+						neededIds.push(id);
+					}
+				}
+			}
+		}
+		this.env.setNeededIngredients(neededIds);
 	}
 
 	update(delta: number, _time: number) {

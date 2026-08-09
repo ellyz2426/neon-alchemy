@@ -108,6 +108,23 @@ export class EnvironmentSystem extends createSystem({}) {
 	// Mystical arch glow
 	private archGlowMeshes: Mesh[] = [];
 
+	// Wave atmosphere
+	private waveLevel = 1;
+	private ambientLight!: PointLight;
+	private magicCircleOuter!: Mesh;
+	private magicCircleInner!: Mesh;
+
+	// Needed ingredient highlighting
+	private neededIngredients: Set<string> = new Set();
+
+	// Combo level
+	private comboLevel = 0;
+	private cauldronRim!: Mesh;
+
+	// Life orbs
+	private lifeOrbs: { mesh: Mesh; light: PointLight; baseY: number; active: boolean }[] = [];
+	private currentLives = 3;
+
 	init() {
 		this.buildWorkshop();
 		this.buildCauldron();
@@ -119,6 +136,7 @@ export class EnvironmentSystem extends createSystem({}) {
 		this.buildCrystalFormations();
 		this.buildMysticalArch();
 		this.buildCobwebs();
+		this.buildLifeOrbs();
 	}
 
 	private buildWorkshop() {
@@ -153,21 +171,21 @@ export class EnvironmentSystem extends createSystem({}) {
 		}
 
 		// Floor detail - magic circle
-		const circle = new Mesh(
+		this.magicCircleOuter = new Mesh(
 			new RingGeometry(1.2, 1.4, 32),
 			new MeshStandardMaterial({ color: 0x6633aa, emissive: 0x331166, emissiveIntensity: 0.3, side: DoubleSide })
 		);
-		circle.rotation.x = -Math.PI / 2;
-		circle.position.set(0, 0.01, -0.5);
-		world.scene.add(circle);
+		this.magicCircleOuter.rotation.x = -Math.PI / 2;
+		this.magicCircleOuter.position.set(0, 0.01, -0.5);
+		world.scene.add(this.magicCircleOuter);
 
-		const innerCircle = new Mesh(
+		this.magicCircleInner = new Mesh(
 			new RingGeometry(0.8, 0.85, 32),
 			new MeshStandardMaterial({ color: 0x8855cc, emissive: 0x442288, emissiveIntensity: 0.4, side: DoubleSide })
 		);
-		innerCircle.rotation.x = -Math.PI / 2;
-		innerCircle.position.set(0, 0.015, -0.5);
-		world.scene.add(innerCircle);
+		this.magicCircleInner.rotation.x = -Math.PI / 2;
+		this.magicCircleInner.position.set(0, 0.015, -0.5);
+		world.scene.add(this.magicCircleInner);
 
 		// Rune symbols on magic circle
 		for (let i = 0; i < 8; i++) {
@@ -258,9 +276,9 @@ export class EnvironmentSystem extends createSystem({}) {
 		}
 
 		// Ambient purple light
-		const ambLight = new PointLight(0x6633aa, 2, 12);
-		ambLight.position.set(0, 3.2, 0);
-		world.scene.add(ambLight);
+		this.ambientLight = new PointLight(0x6633aa, 2, 12);
+		this.ambientLight.position.set(0, 3.2, 0);
+		world.scene.add(this.ambientLight);
 
 		// Workbench
 		const benchTop = new Mesh(
@@ -574,13 +592,13 @@ export class EnvironmentSystem extends createSystem({}) {
 		bottom.position.y = 0.31;
 		this.cauldronGroup.add(bottom);
 
-		const rim = new Mesh(
+		this.cauldronRim = new Mesh(
 			new TorusGeometry(0.45, 0.025, 8, 24),
-			new MeshStandardMaterial({ color: 0x2a2a3a, metalness: 0.8, roughness: 0.4 })
+			new MeshStandardMaterial({ color: 0x2a2a3a, metalness: 0.8, roughness: 0.4, emissive: 0x000000, emissiveIntensity: 0 })
 		);
-		rim.rotation.x = Math.PI / 2;
-		rim.position.y = 0.8;
-		this.cauldronGroup.add(rim);
+		this.cauldronRim.rotation.x = Math.PI / 2;
+		this.cauldronRim.position.y = 0.8;
+		this.cauldronGroup.add(this.cauldronRim);
 
 		const runeRing = new Mesh(
 			new TorusGeometry(0.46, 0.01, 6, 32),
@@ -938,6 +956,79 @@ export class EnvironmentSystem extends createSystem({}) {
 	startBrewingEffect() { this.isBrewing = true; }
 	stopBrewingEffect() { this.isBrewing = false; }
 
+	private buildLifeOrbs() {
+		const world = this.world as World;
+		const orbPositions: [number, number, number][] = [
+			[-0.5, 2.3, -1.5],
+			[0, 2.3, -1.5],
+			[0.5, 2.3, -1.5],
+		];
+
+		for (const [x, y, z] of orbPositions) {
+			const orbMesh = new Mesh(
+				new SphereGeometry(0.06, 12, 8),
+				new MeshStandardMaterial({
+					color: 0xff4466,
+					emissive: 0xff2244,
+					emissiveIntensity: 1.2,
+					transparent: true,
+					opacity: 0.85,
+				})
+			);
+			orbMesh.position.set(x, y, z);
+			world.scene.add(orbMesh);
+
+			const orbLight = new PointLight(0xff4466, 0.4, 1.2);
+			orbLight.position.set(x, y, z);
+			world.scene.add(orbLight);
+
+			this.lifeOrbs.push({ mesh: orbMesh, light: orbLight, baseY: y, active: true });
+		}
+	}
+
+	setWaveLevel(wave: number) {
+		this.waveLevel = wave;
+
+		// Shift ambient light color: purple → deeper/darker at higher waves
+		const waveFactor = Math.min((wave - 1) / 8, 1);
+		const hue = 0.75 - waveFactor * 0.08; // shift slightly toward blue
+		const lightness = 0.4 - waveFactor * 0.15;
+		this.ambientLight.color.setHSL(hue, 0.7, lightness);
+		this.ambientLight.intensity = Math.max(1.0, 2 - waveFactor * 0.8);
+	}
+
+	setNeededIngredients(ingredientIds: string[]) {
+		this.neededIngredients.clear();
+		for (const id of ingredientIds) {
+			this.neededIngredients.add(id);
+		}
+	}
+
+	setComboLevel(combo: number) {
+		this.comboLevel = combo;
+	}
+
+	setLives(lives: number) {
+		this.currentLives = lives;
+		for (let i = 0; i < this.lifeOrbs.length; i++) {
+			const orb = this.lifeOrbs[i];
+			// Orbs are indexed 0, 1, 2 representing lives 3, 2, 1
+			// Orb 0 = 3rd life, Orb 1 = 2nd life, Orb 2 = 1st life
+			// So orb i is active if lives > (2 - i) => i < lives
+			const shouldBeActive = i < lives;
+			if (!shouldBeActive && orb.active) {
+				orb.active = false;
+				// Immediate shrink start — animation handled in update
+			} else if (shouldBeActive && !orb.active) {
+				orb.active = true;
+				orb.mesh.scale.set(1, 1, 1);
+				const mat = orb.mesh.material as MeshStandardMaterial;
+				mat.opacity = 0.85;
+				orb.light.intensity = 0.4;
+			}
+		}
+	}
+
 	spawnPotionBottle(color: number) {
 		const world = this.world as World;
 		const group = new Group();
@@ -1016,7 +1107,8 @@ export class EnvironmentSystem extends createSystem({}) {
 		// Liquid wobble
 		this.cauldronLiquid.position.y = 0.72 + Math.sin(this.elapsedTime * 2) * 0.005;
 
-		// Fire animation
+		// Fire animation (brighter at higher waves)
+		const fireBrightness = 1 + Math.min((this.waveLevel - 1) / 6, 1) * 0.6;
 		this.flames.forEach((f) => {
 			f.phase += delta * (6 + Math.random() * 4);
 			const flicker = Math.sin(f.phase) * 0.3 + Math.sin(f.phase * 2.7) * 0.15 + Math.sin(f.phase * 5.3) * 0.1;
@@ -1026,7 +1118,7 @@ export class EnvironmentSystem extends createSystem({}) {
 			f.mesh.position.y = f.baseY + flicker * 0.015;
 			const fMat = f.mesh.material as MeshStandardMaterial;
 			fMat.opacity = 0.55 + flicker * 0.25;
-			fMat.emissiveIntensity = 0.8 + flicker * 0.6;
+			fMat.emissiveIntensity = (0.8 + flicker * 0.6) * fireBrightness;
 			const hue = 0.06 + flicker * 0.02;
 			fMat.color.setHSL(hue, 1.0, 0.55);
 			fMat.emissive.setHSL(hue - 0.01, 1.0, 0.45);
@@ -1073,21 +1165,37 @@ export class EnvironmentSystem extends createSystem({}) {
 			c.mesh.scale.y = 0.8 + Math.sin(c.flicker * 2) * 0.3;
 		});
 
-		// Ambient particles
+		// Ambient particles (combo 5+: speed up, glow brighter)
+		const particleSpeedMult = this.comboLevel >= 5 ? 1.5 + (this.comboLevel - 5) * 0.15 : 1;
+		const particleGlowBoost = this.comboLevel >= 5 ? 0.15 + (this.comboLevel - 5) * 0.03 : 0;
 		this.ambientParticles.forEach((p) => {
 			const phase = p.userData.phase as number;
 			const speed = p.userData.speed as number;
 			const baseY = p.userData.baseY as number;
-			p.position.y = baseY + Math.sin(this.elapsedTime * speed + phase) * 0.3;
-			p.position.x += Math.sin(this.elapsedTime * 0.1 + phase) * 0.001;
+			p.position.y = baseY + Math.sin(this.elapsedTime * speed * particleSpeedMult + phase) * 0.3;
+			p.position.x += Math.sin(this.elapsedTime * 0.1 * particleSpeedMult + phase) * 0.001;
 			const pMat = p.material as MeshStandardMaterial;
-			pMat.opacity = 0.15 + Math.sin(this.elapsedTime * 0.5 + phase) * 0.15;
+			pMat.opacity = 0.15 + Math.sin(this.elapsedTime * 0.5 + phase) * 0.15 + particleGlowBoost;
+			pMat.emissiveIntensity = (pMat.emissiveIntensity || 0.8) + particleGlowBoost * 2;
 		});
 
-		// Reset pulsed ingredients
-		this.ingredientShelves.forEach((data) => {
-			if (data.mesh.scale.x > 1.01) {
+		// Reset pulsed ingredients + needed ingredient highlighting
+		this.ingredientShelves.forEach((data, id) => {
+			const isNeeded = this.neededIngredients.has(id);
+			const isHovered = this.hoveredIngredient === id;
+
+			if (data.mesh.scale.x > 1.01 && !isHovered) {
 				data.mesh.scale.lerp({ x: 1, y: 1, z: 1 } as any, delta * 5);
+			}
+
+			if (isNeeded && !isHovered) {
+				// Pulsing glow for needed ingredients
+				const needPulse = 0.5 + Math.sin(this.elapsedTime * 3 + id.length * 1.5) * 0.5;
+				const shelfMat = data.mesh.material as MeshStandardMaterial;
+				shelfMat.emissiveIntensity = 0.6 + needPulse * 0.8;
+				data.light.intensity = 0.5 + needPulse * 1.5;
+			} else if (!isHovered) {
+				// Default state
 				data.light.intensity = MathUtils.lerp(data.light.intensity, 0.5, delta * 5);
 			}
 		});
@@ -1099,17 +1207,72 @@ export class EnvironmentSystem extends createSystem({}) {
 			}
 		});
 
-		// Rune pulsing
+		// Rune pulsing (wave: faster pulse, combo 7+: faster rotation)
+		const runePulseSpeed = 2 + Math.min((this.waveLevel - 1) / 4, 2) * 1.5;
+		const runeRotSpeed = this.comboLevel >= 7 ? 0.3 + (this.comboLevel - 7) * 0.15 + 0.5 : 0.3;
 		this.runeSymbols.forEach((rune, i) => {
 			const runeMat = rune.material as MeshStandardMaterial;
 			if (this.isPlaying) {
-				const pulse = 0.4 + Math.sin(this.elapsedTime * 2 + i * 0.8) * 0.4;
+				const pulse = 0.4 + Math.sin(this.elapsedTime * runePulseSpeed + i * 0.8) * 0.4;
 				runeMat.emissiveIntensity = 0.3 + pulse * 0.8;
 				runeMat.opacity = 0.4 + pulse * 0.4;
-				rune.rotation.y += delta * 0.3;
+				rune.rotation.y += delta * runeRotSpeed;
 			} else {
 				runeMat.emissiveIntensity = MathUtils.lerp(runeMat.emissiveIntensity, 0.2, delta * 2);
 				runeMat.opacity = MathUtils.lerp(runeMat.opacity, 0.3, delta * 2);
+			}
+		});
+
+		// Magic circle intensity (combo 7+: intensify)
+		if (this.comboLevel >= 7) {
+			const circleBoost = Math.min((this.comboLevel - 7) * 0.15 + 0.3, 0.8);
+			const coPulse = Math.sin(this.elapsedTime * 3) * 0.15;
+			const outerMat = this.magicCircleOuter.material as MeshStandardMaterial;
+			outerMat.emissiveIntensity = 0.3 + circleBoost + coPulse;
+			const innerMat = this.magicCircleInner.material as MeshStandardMaterial;
+			innerMat.emissiveIntensity = 0.4 + circleBoost + coPulse;
+		} else {
+			const outerMat = this.magicCircleOuter.material as MeshStandardMaterial;
+			outerMat.emissiveIntensity = MathUtils.lerp(outerMat.emissiveIntensity, 0.3, delta * 2);
+			const innerMat = this.magicCircleInner.material as MeshStandardMaterial;
+			innerMat.emissiveIntensity = MathUtils.lerp(innerMat.emissiveIntensity, 0.4, delta * 2);
+		}
+
+		// Cauldron rim combo glow (combo 3+: brighter)
+		{
+			const rimMat = this.cauldronRim.material as MeshStandardMaterial;
+			if (this.comboLevel >= 3) {
+				const rimGlow = Math.min((this.comboLevel - 3) * 0.2 + 0.3, 1.2);
+				const rimPulse = Math.sin(this.elapsedTime * 4) * 0.15;
+				rimMat.emissive.set(0x8844cc);
+				rimMat.emissiveIntensity = rimGlow + rimPulse;
+			} else {
+				rimMat.emissive.set(0x000000);
+				rimMat.emissiveIntensity = MathUtils.lerp(rimMat.emissiveIntensity, 0, delta * 3);
+			}
+		}
+
+		// Life orbs animation
+		this.lifeOrbs.forEach((orb, i) => {
+			if (orb.active) {
+				// Gentle bobbing
+				orb.mesh.position.y = orb.baseY + Math.sin(this.elapsedTime * 1.2 + i * 2.1) * 0.04;
+				orb.light.position.y = orb.mesh.position.y;
+				// Subtle glow pulse
+				const orbMat = orb.mesh.material as MeshStandardMaterial;
+				const orbPulse = 0.5 + Math.sin(this.elapsedTime * 1.8 + i * 1.5) * 0.5;
+				orbMat.emissiveIntensity = 1.0 + orbPulse * 0.4;
+				orb.light.intensity = 0.3 + orbPulse * 0.2;
+			} else {
+				// Shrink and fade
+				const currentScale = orb.mesh.scale.x;
+				if (currentScale > 0.05) {
+					const newScale = MathUtils.lerp(currentScale, 0, delta * 3);
+					orb.mesh.scale.set(newScale, newScale, newScale);
+					const orbMat = orb.mesh.material as MeshStandardMaterial;
+					orbMat.opacity = MathUtils.lerp(orbMat.opacity, 0, delta * 3);
+					orb.light.intensity = MathUtils.lerp(orb.light.intensity, 0, delta * 3);
+				}
 			}
 		});
 
