@@ -29,10 +29,7 @@
       "name": "HUD Panel",
       "content": { "type": "asset", "asset": "hud-panel" },
       "transform": { "position": [0, 2.4, -1.5], "scale": 0.3 },
-      "components": {
-        "RayInteractable": {},
-        "ScreenSpace": { "top": "10px", "left": "50%", "width": "50vw", "height": "8%" }
-      }
+      "components": { "RayInteractable": {} }
     },
     {
       "id": "orders-panel",
@@ -53,10 +50,7 @@
       "name": "Cauldron Status Panel",
       "content": { "type": "asset", "asset": "cauldron-panel" },
       "transform": { "position": [0.5, 1.3, -0.8], "rotationDeg": [0, -15, 0], "scale": 0.3 },
-      "components": {
-        "RayInteractable": {},
-        "ScreenSpace": { "bottom": "10px", "right": "10px", "width": "22vw", "height": "30%" }
-      }
+      "components": { "RayInteractable": {} }
     },
     {
       "id": "wave-complete-panel",

@@ -22,6 +22,8 @@ export class InputSystem extends createSystem({}) {
 	private pointerNdc = new Vector2(0, 0);
 	private pointerDown = false;
 	private wasPointerDown = false;
+	private currentHover: string | null = null;
+	private hoverNdc = new Vector2(0, 0);
 
 	init() {
 		const world = this.world as World;
@@ -40,6 +42,11 @@ export class InputSystem extends createSystem({}) {
 		});
 		canvas.addEventListener('pointerup', () => {
 			this.pointerDown = false;
+		});
+		canvas.addEventListener('pointermove', (e: PointerEvent) => {
+			const rect = canvas.getBoundingClientRect();
+			this.hoverNdc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+			this.hoverNdc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 		});
 	}
 
@@ -78,12 +85,44 @@ export class InputSystem extends createSystem({}) {
 	update(delta: number, _time: number) {
 		this.clickCooldown -= delta;
 
-		// Detect click (rising edge)
-		if (this.pointerDown && !this.wasPointerDown && this.clickCooldown <= 0) {
-			this.clickCooldown = 0.3;
-			this.performRaycast();
+		const world = this.world as World;
+		if (!world.renderer.xr.isPresenting) {
+			// Hover detection
+			this.performHoverCheck();
+
+			// Detect click (rising edge)
+			if (this.pointerDown && !this.wasPointerDown && this.clickCooldown <= 0) {
+				this.clickCooldown = 0.3;
+				this.performRaycast();
+			}
 		}
+
 		this.wasPointerDown = this.pointerDown;
+	}
+
+	private performHoverCheck() {
+		const world = this.world as World;
+		const camera = world.camera;
+		if (!camera) return;
+
+		this.raycaster.setFromCamera(this.hoverNdc, camera);
+		const targets = [...this.ingredientMeshes.values()];
+		const intersects = this.raycaster.intersectObjects(targets);
+
+		let newHover: string | null = null;
+		if (intersects.length > 0) {
+			newHover = intersects[0].object.userData.ingredientId as string;
+		}
+
+		if (newHover !== this.currentHover) {
+			if (this.currentHover) {
+				this.env.highlightIngredient(this.currentHover, false);
+			}
+			if (newHover) {
+				this.env.highlightIngredient(newHover, true);
+			}
+			this.currentHover = newHover;
+		}
 	}
 
 	private performRaycast() {

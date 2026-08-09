@@ -1,4 +1,4 @@
-import { createSystem, UIKitMLAsset, World } from '@iwsdk/core';
+import { createSystem, UIKitMLAsset, World, Vector3 } from '@iwsdk/core';
 import {
 	type GameData,
 	type Order,
@@ -12,17 +12,19 @@ import {
 import { EnvironmentSystem } from './environment-system.js';
 import { AudioSystem } from './audio-system.js';
 
+// Panel info for toggling visibility via position
+interface PanelEntry {
+	asset: UIKitMLAsset;
+	showPos: Vector3;
+}
+
+const HIDDEN_POS = new Vector3(0, -100, 0);
+
 export class GameSystem extends createSystem({}) {
 	private data!: GameData;
 
-	// Panels
-	private menuPanel: UIKitMLAsset | null = null;
-	private hudPanel: UIKitMLAsset | null = null;
-	private ordersPanel: UIKitMLAsset | null = null;
-	private recipesPanel: UIKitMLAsset | null = null;
-	private cauldronPanel: UIKitMLAsset | null = null;
-	private waveCompletePanel: UIKitMLAsset | null = null;
-	private gameOverPanel: UIKitMLAsset | null = null;
+	// Panel entries with show positions
+	private panels: Map<string, PanelEntry> = new Map();
 
 	// System refs
 	private env!: EnvironmentSystem;
@@ -35,6 +37,9 @@ export class GameSystem extends createSystem({}) {
 	private brewTimer = 0;
 	private lastTimerWarn = 0;
 
+	// Brewing animation
+	private brewParticles: { mesh: import('@iwsdk/core').Mesh; velocity: Vector3; life: number }[] = [];
+
 	init() {
 		this.data = createInitialGameData();
 		const world = this.world as World;
@@ -42,14 +47,16 @@ export class GameSystem extends createSystem({}) {
 		this.env = world.getSystem(EnvironmentSystem)!;
 		this.audio = world.getSystem(AudioSystem)!;
 
-		// Resolve panels
-		this.menuPanel = world.getSceneObject<UIKitMLAsset>('menu-panel') ?? null;
-		this.hudPanel = world.getSceneObject<UIKitMLAsset>('hud-panel') ?? null;
-		this.ordersPanel = world.getSceneObject<UIKitMLAsset>('orders-panel') ?? null;
-		this.recipesPanel = world.getSceneObject<UIKitMLAsset>('recipes-panel') ?? null;
-		this.cauldronPanel = world.getSceneObject<UIKitMLAsset>('cauldron-panel') ?? null;
-		this.waveCompletePanel = world.getSceneObject<UIKitMLAsset>('wave-complete-panel') ?? null;
-		this.gameOverPanel = world.getSceneObject<UIKitMLAsset>('game-over-panel') ?? null;
+		// Resolve and store panels with their show positions
+		const panelIds = ['menu-panel', 'hud-panel', 'orders-panel', 'recipes-panel', 'cauldron-panel', 'wave-complete-panel', 'game-over-panel'];
+		for (const id of panelIds) {
+			const asset = world.getSceneObject<UIKitMLAsset>(id);
+			if (asset) {
+				const pos = new Vector3();
+				asset.getWorldPosition(pos);
+				this.panels.set(id, { asset, showPos: pos.clone() });
+			}
+		}
 
 		this.wireMenuPanel();
 		this.wireRecipesPanel();
@@ -62,64 +69,82 @@ export class GameSystem extends createSystem({}) {
 		this.updateMenuHighScore();
 	}
 
+	private getPanel(id: string): UIKitMLAsset | null {
+		return this.panels.get(id)?.asset ?? null;
+	}
+
+	private setPanelVisible(id: string, visible: boolean) {
+		const entry = this.panels.get(id);
+		if (!entry) return;
+		if (visible) {
+			entry.asset.position.copy(entry.showPos);
+		} else {
+			entry.asset.position.copy(HIDDEN_POS);
+		}
+	}
+
 	private wireMenuPanel() {
-		if (!this.menuPanel) return;
-		this.menuPanel.getElementById('btn-play')?.addEventListener('click', () => {
+		const panel = this.getPanel('menu-panel');
+		if (!panel) return;
+		panel.getElementById('btn-play')?.addEventListener('click', () => {
 			this.audio.playClick();
 			this.startGame();
 		});
-		this.menuPanel.getElementById('btn-recipes')?.addEventListener('click', () => {
+		panel.getElementById('btn-recipes')?.addEventListener('click', () => {
 			this.audio.playClick();
 			this.showState('recipes');
 		});
 	}
 
 	private wireRecipesPanel() {
-		if (!this.recipesPanel) return;
+		const panel = this.getPanel('recipes-panel');
+		if (!panel) return;
 		// Update recipe content
 		RECIPES.forEach((recipe, i) => {
-			if (i > 4) return; // only 5 slots in panel
-			const nameEl = this.recipesPanel!.getElementById(`rname-${i}`);
-			const ingrEl = this.recipesPanel!.getElementById(`ringr-${i}`);
+			const nameEl = panel.getElementById(`rname-${i}`);
+			const ingrEl = panel.getElementById(`ringr-${i}`);
 			if (nameEl) nameEl.setProperties({ text: recipe.name });
 			if (ingrEl) {
 				const names = recipe.ingredients.map((id) => getIngredientById(id)?.name ?? id).join(' + ');
 				ingrEl.setProperties({ text: names });
 			}
 		});
-		this.recipesPanel.getElementById('btn-close')?.addEventListener('click', () => {
+		panel.getElementById('btn-close')?.addEventListener('click', () => {
 			this.audio.playClick();
 			this.showState('menu');
 		});
 	}
 
 	private wireCauldronPanel() {
-		if (!this.cauldronPanel) return;
-		this.cauldronPanel.getElementById('btn-brew')?.addEventListener('click', () => {
+		const panel = this.getPanel('cauldron-panel');
+		if (!panel) return;
+		panel.getElementById('btn-brew')?.addEventListener('click', () => {
 			this.audio.playClick();
 			this.brewPotion();
 		});
-		this.cauldronPanel.getElementById('btn-clear')?.addEventListener('click', () => {
+		panel.getElementById('btn-clear')?.addEventListener('click', () => {
 			this.audio.playClick();
 			this.clearCauldron();
 		});
 	}
 
 	private wireWaveCompletePanel() {
-		if (!this.waveCompletePanel) return;
-		this.waveCompletePanel.getElementById('btn-next')?.addEventListener('click', () => {
+		const panel = this.getPanel('wave-complete-panel');
+		if (!panel) return;
+		panel.getElementById('btn-next')?.addEventListener('click', () => {
 			this.audio.playClick();
 			this.nextWave();
 		});
 	}
 
 	private wireGameOverPanel() {
-		if (!this.gameOverPanel) return;
-		this.gameOverPanel.getElementById('btn-replay')?.addEventListener('click', () => {
+		const panel = this.getPanel('game-over-panel');
+		if (!panel) return;
+		panel.getElementById('btn-replay')?.addEventListener('click', () => {
 			this.audio.playClick();
 			this.startGame();
 		});
-		this.gameOverPanel.getElementById('btn-menu')?.addEventListener('click', () => {
+		panel.getElementById('btn-menu')?.addEventListener('click', () => {
 			this.audio.playClick();
 			this.showState('menu');
 			this.updateMenuHighScore();
@@ -135,18 +160,19 @@ export class GameSystem extends createSystem({}) {
 
 	private showState(state: GameData['state']) {
 		this.data.state = state;
-		if (this.menuPanel) this.menuPanel.visible = state === 'menu';
-		if (this.hudPanel) this.hudPanel.visible = state === 'playing';
-		if (this.ordersPanel) this.ordersPanel.visible = state === 'playing';
-		if (this.recipesPanel) this.recipesPanel.visible = state === 'recipes';
-		if (this.cauldronPanel) this.cauldronPanel.visible = state === 'playing';
-		if (this.waveCompletePanel) this.waveCompletePanel.visible = state === 'wave_complete';
-		if (this.gameOverPanel) this.gameOverPanel.visible = state === 'game_over';
+		this.setPanelVisible('menu-panel', state === 'menu');
+		this.setPanelVisible('hud-panel', state === 'playing');
+		this.setPanelVisible('orders-panel', state === 'playing');
+		this.setPanelVisible('recipes-panel', state === 'recipes');
+		this.setPanelVisible('cauldron-panel', state === 'playing');
+		this.setPanelVisible('wave-complete-panel', state === 'wave_complete');
+		this.setPanelVisible('game-over-panel', state === 'game_over');
 	}
 
 	private updateMenuHighScore() {
-		if (!this.menuPanel) return;
-		this.menuPanel.getElementById('highscore')?.setProperties({
+		const panel = this.getPanel('menu-panel');
+		if (!panel) return;
+		panel.getElementById('highscore')?.setProperties({
 			text: `HIGH SCORE: ${this.data.highScore}`,
 		});
 	}
@@ -225,12 +251,14 @@ export class GameSystem extends createSystem({}) {
 		this.data.brewProgress = 0;
 		this.audio.playBubbling();
 		this.env.setBubblesActive(true);
+		this.env.startBrewingEffect();
 	}
 
 	private completeBrew() {
 		const recipe = findMatchingRecipe(this.data.cauldronIngredients);
 		this.data.isBrewing = false;
 		this.data.brewProgress = 0;
+		this.env.stopBrewingEffect();
 
 		if (recipe) {
 			// Check if any order matches
@@ -310,12 +338,13 @@ export class GameSystem extends createSystem({}) {
 		this.audio.playWaveComplete();
 		this.env.setBubblesActive(false);
 
-		if (!this.waveCompletePanel) return;
-		this.waveCompletePanel.getElementById('wave-num')?.setProperties({ text: `Wave ${this.data.wave}` });
-		this.waveCompletePanel.getElementById('potions-brewed')?.setProperties({ text: `${this.data.potionsBrewed}` });
-		this.waveCompletePanel.getElementById('perfect-brews')?.setProperties({ text: `${this.data.perfectBrews}` });
-		this.waveCompletePanel.getElementById('best-combo')?.setProperties({ text: `x${this.data.bestCombo}` });
-		this.waveCompletePanel.getElementById('wave-score')?.setProperties({ text: `${this.data.waveScore}` });
+		const panel = this.getPanel('wave-complete-panel');
+		if (!panel) return;
+		panel.getElementById('wave-num')?.setProperties({ text: `Wave ${this.data.wave}` });
+		panel.getElementById('potions-brewed')?.setProperties({ text: `${this.data.potionsBrewed}` });
+		panel.getElementById('perfect-brews')?.setProperties({ text: `${this.data.perfectBrews}` });
+		panel.getElementById('best-combo')?.setProperties({ text: `x${this.data.bestCombo}` });
+		panel.getElementById('wave-score')?.setProperties({ text: `${this.data.waveScore}` });
 	}
 
 	private nextWave() {
@@ -356,56 +385,66 @@ export class GameSystem extends createSystem({}) {
 		this.audio.stopAmbient();
 		this.env.setBubblesActive(false);
 
-		if (!this.gameOverPanel) return;
-		this.gameOverPanel.getElementById('final-score')?.setProperties({ text: `${this.data.score}` });
-		this.gameOverPanel.getElementById('waves-cleared')?.setProperties({ text: `${this.data.wave}` });
-		this.gameOverPanel.getElementById('total-potions')?.setProperties({ text: `${this.data.totalPotionsBrewed}` });
-		this.gameOverPanel.getElementById('high-score')?.setProperties({ text: `${this.data.highScore}` });
-		this.gameOverPanel.getElementById('new-record')?.setProperties({
+		const panel = this.getPanel('game-over-panel');
+		if (!panel) return;
+		panel.getElementById('final-score')?.setProperties({ text: `${this.data.score}` });
+		panel.getElementById('waves-cleared')?.setProperties({ text: `${this.data.wave}` });
+		panel.getElementById('total-potions')?.setProperties({ text: `${this.data.totalPotionsBrewed}` });
+		panel.getElementById('high-score')?.setProperties({ text: `${this.data.highScore}` });
+		panel.getElementById('new-record')?.setProperties({
 			text: this.data.score >= this.data.highScore ? '★ NEW RECORD! ★' : '',
 		});
 	}
 
 	private updateHUD() {
-		if (!this.hudPanel) return;
-		this.hudPanel.getElementById('score')?.setProperties({ text: `${this.data.score}` });
-		this.hudPanel.getElementById('wave')?.setProperties({ text: `${this.data.wave}` });
-		this.hudPanel.getElementById('timer')?.setProperties({ text: `${Math.ceil(this.data.waveTimer)}` });
-		this.hudPanel.getElementById('combo')?.setProperties({ text: `x${Math.max(1, this.data.combo)}` });
-		this.hudPanel.getElementById('lives')?.setProperties({ text: `${this.data.lives}` });
+		const panel = this.getPanel('hud-panel');
+		if (!panel) return;
+		panel.getElementById('score')?.setProperties({ text: `${this.data.score}` });
+		panel.getElementById('wave')?.setProperties({ text: `${this.data.wave}` });
+		panel.getElementById('timer')?.setProperties({ text: `${Math.ceil(this.data.waveTimer)}` });
+		panel.getElementById('combo')?.setProperties({ text: `x${Math.max(1, this.data.combo)}` });
+		panel.getElementById('lives')?.setProperties({ text: `${this.data.lives}` });
 	}
 
 	private updateOrdersPanel() {
-		if (!this.ordersPanel) return;
+		const panel = this.getPanel('orders-panel');
+		if (!panel) return;
 
 		for (let i = 0; i < 3; i++) {
 			const order = this.data.orders[i];
-			const orderEl = this.ordersPanel.getElementById(`order-${i}`);
-			const nameEl = this.ordersPanel.getElementById(`name-${i}`);
-			const timerEl = this.ordersPanel.getElementById(`timer-${i}`);
+			const orderEl = panel.getElementById(`order-${i}`);
+			const nameEl = panel.getElementById(`name-${i}`);
+			const timerEl = panel.getElementById(`timer-${i}`);
 
 			if (order) {
 				const recipe = getRecipeById(order.recipeId);
 				if (orderEl) orderEl.setProperties({ display: 'flex' });
 				if (nameEl) nameEl.setProperties({ text: recipe?.name ?? order.recipeId });
-				if (timerEl) timerEl.setProperties({ text: `${Math.ceil(order.timeRemaining)}s` });
+				if (timerEl) {
+					const remaining = Math.ceil(order.timeRemaining);
+					const urgent = order.isUrgent || order.timeRemaining < order.timeLimit * 0.3;
+					if (timerEl) timerEl.setProperties({
+						text: `${remaining}s${urgent ? ' ⚠' : ''}`,
+					});
+				}
 			} else {
 				if (orderEl) orderEl.setProperties({ display: 'none' });
 			}
 		}
 
-		const emptyMsg = this.ordersPanel.getElementById('empty-msg');
+		const emptyMsg = panel.getElementById('empty-msg');
 		if (emptyMsg) {
 			emptyMsg.setProperties({ display: this.data.orders.length === 0 ? 'flex' : 'none' });
 		}
 	}
 
 	private updateCauldronPanel() {
-		if (!this.cauldronPanel) return;
+		const panel = this.getPanel('cauldron-panel');
+		if (!panel) return;
 
 		for (let i = 0; i < 3; i++) {
 			const ingredientId = this.data.cauldronIngredients[i];
-			const nameEl = this.cauldronPanel.getElementById(`sname-${i}`);
+			const nameEl = panel.getElementById(`sname-${i}`);
 
 			if (ingredientId) {
 				const ingredient = getIngredientById(ingredientId);
@@ -415,10 +454,11 @@ export class GameSystem extends createSystem({}) {
 			}
 		}
 
-		const statusEl = this.cauldronPanel.getElementById('status');
+		const statusEl = panel.getElementById('status');
 		if (statusEl) {
 			if (this.data.isBrewing) {
-				statusEl.setProperties({ text: 'Brewing...' });
+				const pct = Math.floor((this.data.brewProgress / 1.5) * 100);
+				statusEl.setProperties({ text: `Brewing... ${pct}%` });
 			} else if (this.data.cauldronIngredients.length === 0) {
 				statusEl.setProperties({ text: 'Add ingredients...' });
 			} else if (this.data.cauldronIngredients.length < 2) {
@@ -448,8 +488,9 @@ export class GameSystem extends createSystem({}) {
 		}
 
 		// Update HUD timer display
-		if (this.hudPanel) {
-			this.hudPanel.getElementById('timer')?.setProperties({ text: `${Math.ceil(Math.max(0, this.data.waveTimer))}` });
+		const hudPanel = this.getPanel('hud-panel');
+		if (hudPanel) {
+			hudPanel.getElementById('timer')?.setProperties({ text: `${Math.ceil(Math.max(0, this.data.waveTimer))}` });
 		}
 
 		// Order spawning
@@ -473,6 +514,7 @@ export class GameSystem extends createSystem({}) {
 		// Brew progress
 		if (this.data.isBrewing) {
 			this.data.brewProgress += delta;
+			this.updateCauldronPanel(); // show brew % progress
 			if (this.data.brewProgress >= 1.5) {
 				this.completeBrew();
 			}

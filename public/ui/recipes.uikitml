@@ -78,6 +78,16 @@
     <div class="recipe-name" id="rname-4">Poison</div>
     <div class="recipe-ingredients" id="ringr-4">Mushroom + Fang</div>
   </div>
+  <div class="recipe-row" id="recipe-5">
+    <div class="recipe-dot" id="rdot-5"></div>
+    <div class="recipe-name" id="rname-5">Phoenix Elixir</div>
+    <div class="recipe-ingredients" id="ringr-5">Feather + Herb + Crystal</div>
+  </div>
+  <div class="recipe-row" id="recipe-6">
+    <div class="recipe-dot" id="rdot-6"></div>
+    <div class="recipe-name" id="rname-6">Abyssal Draught</div>
+    <div class="recipe-ingredients" id="ringr-6">Pearl + Fang + Essence</div>
+  </div>
   <div class="close-btn" id="btn-close">
     <div class="close-text">CLOSE</div>
   </div>

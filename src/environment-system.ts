@@ -16,6 +16,7 @@ import {
 	ConeGeometry,
 	PlaneGeometry,
 	DoubleSide,
+	AdditiveBlending,
 } from '@iwsdk/core';
 import { INGREDIENTS, type Ingredient } from './game-data.js';
 
@@ -32,12 +33,21 @@ export class EnvironmentSystem extends createSystem({}) {
 	private targetLiquidColor = new Color(0x8844cc);
 	private elapsedTime = 0;
 
+	// Brewing effect
+	private brewGlowRing: Mesh | null = null;
+	private brewParticles: Mesh[] = [];
+	private isBrewing = false;
+
+	// Hover state
+	private hoveredIngredient: string | null = null;
+
 	init() {
 		this.buildWorkshop();
 		this.buildCauldron();
 		this.buildIngredientShelves();
 		this.buildCandles();
 		this.buildAmbientParticles();
+		this.buildBrewingEffects();
 	}
 
 	private buildWorkshop() {
@@ -353,12 +363,44 @@ export class EnvironmentSystem extends createSystem({}) {
 			bracket.rotation.y = rotY;
 			world.scene.add(bracket);
 
-			// Ingredient visual (glowing orb/crystal)
-			const geo = i % 3 === 0
-				? new SphereGeometry(0.06, 8, 6)
-				: i % 3 === 1
-				? new BoxGeometry(0.08, 0.08, 0.08)
-				: new CylinderGeometry(0.02, 0.05, 0.1, 6);
+			// More distinct ingredient visuals per type
+			let geo;
+			switch (ingredient.id) {
+				case 'herb':
+					// Leafy cluster
+					geo = new SphereGeometry(0.06, 6, 4);
+					break;
+				case 'crystal':
+					// Crystalline shard
+					geo = new ConeGeometry(0.04, 0.12, 5);
+					break;
+				case 'mushroom':
+					// Mushroom cap shape
+					geo = new SphereGeometry(0.06, 8, 4);
+					break;
+				case 'essence':
+					// Small sphere (liquid essence)
+					geo = new SphereGeometry(0.045, 12, 8);
+					break;
+				case 'scale':
+					// Flat diamond shape
+					geo = new BoxGeometry(0.09, 0.02, 0.09);
+					break;
+				case 'fang':
+					// Sharp fang
+					geo = new ConeGeometry(0.025, 0.12, 4);
+					break;
+				case 'feather':
+					// Elongated shape
+					geo = new CylinderGeometry(0.01, 0.04, 0.12, 6);
+					break;
+				case 'pearl':
+					// Perfect sphere
+					geo = new SphereGeometry(0.04, 16, 12);
+					break;
+				default:
+					geo = new SphereGeometry(0.06, 8, 6);
+			}
 
 			const mat = new MeshStandardMaterial({
 				color: ingredient.color,
@@ -378,7 +420,41 @@ export class EnvironmentSystem extends createSystem({}) {
 			light.position.set(x, y + 0.12, z);
 			world.scene.add(light);
 
-			this.ingredientShelves.set(ingredient.id, { mesh, light, label: mesh });
+			// 3D label plate above shelf — glowing name indicator
+			const labelGroup = new Group();
+			// Small colored indicator bar
+			const labelBar = new Mesh(
+				new BoxGeometry(0.35, 0.035, 0.005),
+				new MeshStandardMaterial({
+					color: ingredient.color,
+					emissive: ingredient.glowColor,
+					emissiveIntensity: 0.4,
+					transparent: true,
+					opacity: 0.7,
+				})
+			);
+			labelGroup.add(labelBar);
+
+			// Tiny dot on each side
+			const dotL = new Mesh(
+				new SphereGeometry(0.008, 6, 4),
+				new MeshStandardMaterial({ color: ingredient.glowColor, emissive: ingredient.glowColor, emissiveIntensity: 1 })
+			);
+			dotL.position.set(-0.19, 0, 0);
+			labelGroup.add(dotL);
+
+			const dotR = new Mesh(
+				new SphereGeometry(0.008, 6, 4),
+				new MeshStandardMaterial({ color: ingredient.glowColor, emissive: ingredient.glowColor, emissiveIntensity: 1 })
+			);
+			dotR.position.set(0.19, 0, 0);
+			labelGroup.add(dotR);
+
+			labelGroup.position.set(x, y + 0.22, z);
+			labelGroup.rotation.y = rotY;
+			world.scene.add(labelGroup);
+
+			this.ingredientShelves.set(ingredient.id, { mesh, light, label: labelGroup });
 		});
 	}
 
@@ -466,7 +542,13 @@ export class EnvironmentSystem extends createSystem({}) {
 			shelf.light.intensity = highlight ? 2.0 : 0.5;
 			const mat = shelf.mesh.material as MeshStandardMaterial;
 			mat.emissiveIntensity = highlight ? 1.2 : 0.6;
+			mat.opacity = highlight ? 1.0 : 0.85;
+			// Scale label when highlighted
+			if (shelf.label) {
+				shelf.label.scale.set(highlight ? 1.3 : 1, highlight ? 1.3 : 1, highlight ? 1.3 : 1);
+			}
 		}
+		this.hoveredIngredient = highlight ? id : null;
 	}
 
 	pulseIngredient(id: string) {
@@ -475,6 +557,57 @@ export class EnvironmentSystem extends createSystem({}) {
 			shelf.mesh.scale.set(1.3, 1.3, 1.3);
 			shelf.light.intensity = 3.0;
 		}
+	}
+
+	private buildBrewingEffects() {
+		const world = this.world as World;
+
+		// Glow ring around cauldron during brewing
+		this.brewGlowRing = new Mesh(
+			new TorusGeometry(0.5, 0.03, 8, 32),
+			new MeshStandardMaterial({
+				color: 0xaa66ff,
+				emissive: 0xaa44ff,
+				emissiveIntensity: 2,
+				transparent: true,
+				opacity: 0,
+			})
+		);
+		this.brewGlowRing.rotation.x = Math.PI / 2;
+		this.brewGlowRing.position.set(0, 0.85, -0.5);
+		world.scene.add(this.brewGlowRing);
+
+		// Brew sparkle particles — ring of sparkles that spin during brewing
+		for (let i = 0; i < 16; i++) {
+			const angle = (i / 16) * Math.PI * 2;
+			const sparkle = new Mesh(
+				new SphereGeometry(0.012, 4, 4),
+				new MeshStandardMaterial({
+					color: 0xffccff,
+					emissive: 0xcc88ff,
+					emissiveIntensity: 1.5,
+					transparent: true,
+					opacity: 0,
+				})
+			);
+			sparkle.position.set(
+				Math.cos(angle) * 0.45,
+				0.85,
+				-0.5 + Math.sin(angle) * 0.45
+			);
+			sparkle.userData.baseAngle = angle;
+			sparkle.userData.heightOffset = Math.random() * 0.3;
+			world.scene.add(sparkle);
+			this.brewParticles.push(sparkle);
+		}
+	}
+
+	startBrewingEffect() {
+		this.isBrewing = true;
+	}
+
+	stopBrewingEffect() {
+		this.isBrewing = false;
 	}
 
 	getIngredientPositions(): Map<string, { x: number; y: number; z: number }> {
@@ -559,6 +692,41 @@ export class EnvironmentSystem extends createSystem({}) {
 			if (data.mesh.scale.x > 1.01) {
 				data.mesh.scale.lerp({ x: 1, y: 1, z: 1 } as any, delta * 5);
 				data.light.intensity = MathUtils.lerp(data.light.intensity, 0.5, delta * 5);
+			}
+		});
+
+		// Ingredient label bob animation
+		this.ingredientShelves.forEach((data) => {
+			if (data.label) {
+				data.label.position.y += Math.sin(this.elapsedTime * 1.5) * 0.0002;
+			}
+		});
+
+		// Brewing effect animation
+		const brewTargetOpacity = this.isBrewing ? 0.8 : 0;
+		if (this.brewGlowRing) {
+			const mat = this.brewGlowRing.material as MeshStandardMaterial;
+			mat.opacity = MathUtils.lerp(mat.opacity, brewTargetOpacity, delta * 5);
+			if (this.isBrewing) {
+				this.brewGlowRing.rotation.z += delta * 2;
+				const pulse = 0.5 + Math.sin(this.elapsedTime * 4) * 0.5;
+				mat.emissiveIntensity = 1.5 + pulse;
+			}
+		}
+
+		this.brewParticles.forEach((sparkle) => {
+			const mat = sparkle.material as MeshStandardMaterial;
+			const targetOp = this.isBrewing ? 0.7 : 0;
+			mat.opacity = MathUtils.lerp(mat.opacity, targetOp, delta * 5);
+
+			if (this.isBrewing) {
+				const baseAngle = sparkle.userData.baseAngle as number;
+				const heightOff = sparkle.userData.heightOffset as number;
+				const angle = baseAngle + this.elapsedTime * 2;
+				const radius = 0.45 + Math.sin(this.elapsedTime * 3 + baseAngle) * 0.08;
+				sparkle.position.x = Math.cos(angle) * radius;
+				sparkle.position.y = 0.85 + heightOff + Math.sin(this.elapsedTime * 4 + baseAngle) * 0.1;
+				sparkle.position.z = -0.5 + Math.sin(angle) * radius;
 			}
 		});
 	}
