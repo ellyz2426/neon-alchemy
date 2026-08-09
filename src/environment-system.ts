@@ -174,6 +174,7 @@ export class EnvironmentSystem extends createSystem({}) {
 		this.buildPatronSpirits();
 		this.buildCauldronLiquidOverlay();
 		this.buildCauldronSmoke();
+		this.buildFloorMushrooms();
 	}
 
 	private buildWorkshop() {
@@ -1117,6 +1118,50 @@ export class EnvironmentSystem extends createSystem({}) {
 			smoke.userData.life = Math.random() * 4;
 			world.scene.add(smoke);
 			this.smokeParticles.push({ mesh: smoke, baseX: bx, speed: 0.15 + Math.random() * 0.1, phase: Math.random() * Math.PI * 2 });
+		}
+	}
+
+	private buildFloorMushrooms() {
+		const world = this.world as World;
+		const mushroomPositions: [number, number, number][] = [
+			[-3.5, 0, -2.5], [-3.2, 0, 1.8], [3.4, 0, -1.0], [3.6, 0, 2.5],
+			[-1.8, 0, -3.2], [2.0, 0, -3.1],
+		];
+		for (const [mx, _my, mz] of mushroomPositions) {
+			const cluster = new Group();
+			const count = 2 + Math.floor(Math.random() * 3);
+			for (let j = 0; j < count; j++) {
+				const stemH = 0.03 + Math.random() * 0.04;
+				const stem = new Mesh(
+					new CylinderGeometry(0.005, 0.007, stemH, 4),
+					new MeshStandardMaterial({ color: 0x887766 })
+				);
+				stem.position.set((Math.random() - 0.5) * 0.08, stemH / 2, (Math.random() - 0.5) * 0.08);
+				cluster.add(stem);
+
+				const capR = 0.012 + Math.random() * 0.012;
+				const hue = 0.75 + Math.random() * 0.15;
+				const capColor = new Color().setHSL(hue, 0.5, 0.35);
+				const cap = new Mesh(
+					new SphereGeometry(capR, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2),
+					new MeshStandardMaterial({
+						color: capColor,
+						emissive: capColor,
+						emissiveIntensity: 0.8,
+						transparent: true,
+						opacity: 0.7,
+					})
+				);
+				cap.position.copy(stem.position);
+				cap.position.y += stemH / 2;
+				cluster.add(cap);
+			}
+
+			const mushLight = new PointLight(0x9966cc, 0.15, 1.0);
+			mushLight.position.y = 0.06;
+			cluster.add(mushLight);
+			cluster.position.set(mx, 0, mz);
+			world.scene.add(cluster);
 		}
 	}
 

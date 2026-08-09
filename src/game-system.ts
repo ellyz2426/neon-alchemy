@@ -489,6 +489,15 @@ export class GameSystem extends createSystem({}) {
 		panel.getElementById('perfect-brews')?.setProperties({ text: `${this.data.perfectBrews}` });
 		panel.getElementById('best-combo')?.setProperties({ text: `x${this.data.bestCombo}` });
 		panel.getElementById('wave-score')?.setProperties({ text: `${this.data.waveScore}` });
+
+		// Star rating based on performance
+		let stars = 1;
+		let starLabel = 'GOOD';
+		if (this.data.potionsBrewed >= 3 && this.data.perfectBrews >= 1) { stars = 2; starLabel = 'GREAT'; }
+		if (this.data.potionsBrewed >= 5 && this.data.perfectBrews >= 2 && this.data.bestCombo >= 3) { stars = 3; starLabel = 'PERFECT'; }
+		const starText = stars === 3 ? '★ ★ ★' : stars === 2 ? '★ ★ ☆' : '★ ☆ ☆';
+		panel.getElementById('stars')?.setProperties({ text: starText });
+		panel.getElementById('star-label')?.setProperties({ text: starLabel });
 	}
 
 	private nextWave() {
