@@ -7,8 +7,13 @@ import {
 	findMatchingRecipe,
 	getIngredientById,
 	getRecipeById,
+	getRemainingIngredients,
+	blendIngredientColors,
+	isBossWave,
+	getAllRecipesForWave,
 	INGREDIENTS,
 	RECIPES,
+	BOSS_RECIPES,
 	findPartialRecipeHints,
 	POWER_UP_DEFS,
 } from './game-data.js';
@@ -57,6 +62,10 @@ export class GameSystem extends createSystem({}) {
 	// Golden ingredient bonus
 	private goldenTimer = 0;
 	private goldenInterval = 20; // seconds between golden spawns
+
+	// Boss wave intro
+	private bossIntroTimer = 0;
+	private autoClearTimer = 0; // auto-clear cauldron after failed brew
 
 	init() {
 		this.data = createInitialGameData();
@@ -176,7 +185,7 @@ export class GameSystem extends createSystem({}) {
 	private showState(state: GameData['state']) {
 		this.data.state = state;
 		this.setPanelVisible('menu-panel', state === 'menu');
-		this.setPanelVisible('hud-panel', state === 'playing');
+		this.setPanelVisible('hud-panel', state === 'playing' || state === 'boss_intro');
 		this.setPanelVisible('orders-panel', state === 'playing');
 		this.setPanelVisible('recipes-panel', state === 'recipes');
 		this.setPanelVisible('cauldron-panel', state === 'playing');
@@ -184,7 +193,7 @@ export class GameSystem extends createSystem({}) {
 		this.setPanelVisible('game-over-panel', state === 'game_over');
 
 		// Notify environment about playing state for rune animation
-		this.env.setPlaying(state === 'playing');
+		this.env.setPlaying(state === 'playing' || state === 'boss_intro');
 	}
 
 	private updateMenuHighScore() {
@@ -228,12 +237,14 @@ export class GameSystem extends createSystem({}) {
 
 		this.showState('playing');
 		this.audio.startAmbient();
+		this.audio.setWaveLayer(1);
 		this.env.setBubblesActive(true);
 		this.env.setCauldronColor(0x8844cc);
 		this.env.setWaveLevel(1);
 		this.env.setComboLevel(0);
 		this.env.setLives(3);
 		this.env.setNeededIngredients([]);
+		this.env.setBossWave(false);
 		this.updateHUD();
 		this.updateOrdersPanel();
 		this.updateCauldronPanel();
@@ -244,19 +255,20 @@ export class GameSystem extends createSystem({}) {
 		if (this.data.orders.length >= 3) return;
 
 		const wave = this.data.wave;
-		// Progressive recipe unlocking: wave 1 = basic (first 4), wave 2-3 = mid (first 7), wave 4+ = all 11
-		const availableRecipes = wave >= 4 ? RECIPES : wave >= 2 ? RECIPES.slice(0, 7) : RECIPES.slice(0, 4);
+		const availableRecipes = getAllRecipesForWave(wave);
 		const recipe = availableRecipes[Math.floor(Math.random() * availableRecipes.length)];
 
 		const baseTime = Math.max(15, 35 - wave * 3);
 		const isUrgent = Math.random() < 0.15 * wave;
+		// Boss waves have tighter timers
+		const bossMultiplier = isBossWave(wave) ? 0.75 : 1.0;
 
 		const order: Order = {
 			recipeId: recipe.id,
-			timeLimit: isUrgent ? baseTime * 0.6 : baseTime,
-			timeRemaining: isUrgent ? baseTime * 0.6 : baseTime,
+			timeLimit: (isUrgent ? baseTime * 0.6 : baseTime) * bossMultiplier,
+			timeRemaining: (isUrgent ? baseTime * 0.6 : baseTime) * bossMultiplier,
 			isUrgent,
-			bonusMultiplier: isUrgent ? 2.0 : 1.0,
+			bonusMultiplier: isUrgent ? 2.0 : isBossWave(wave) ? 1.5 : 1.0,
 		};
 
 		this.data.orders.push(order);
@@ -274,18 +286,16 @@ export class GameSystem extends createSystem({}) {
 		if (this.env.isIngredientOnCooldown(ingredientId)) return;
 
 		this.data.cauldronIngredients.push(ingredientId);
-		this.audio.playIngredientAdd();
+		this.audio.playIngredientAdd(ingredientId);
 		this.env.pulseIngredient(ingredientId);
 		this.env.startIngredientCooldown(ingredientId);
 
 		// Fly ingredient to cauldron (visual effect)
 		this.env.flyIngredientToCauldron(ingredientId);
 
-		// Update cauldron color based on ingredients
-		const ingredient = getIngredientById(ingredientId);
-		if (ingredient) {
-			this.env.setCauldronColor(ingredient.color);
-		}
+		// Update cauldron color — blend all ingredients together
+		const blendedColor = blendIngredientColors(this.data.cauldronIngredients);
+		this.env.setCauldronColor(blendedColor);
 
 		// Flash the cauldron panel
 		this.cauldronFlashTimer = 0.3;
@@ -391,6 +401,9 @@ export class GameSystem extends createSystem({}) {
 
 			// Camera shake on fail
 			this.triggerCameraShake(0.3, 0.015);
+
+			// Auto-clear cauldron after 1 second
+			this.autoClearTimer = 1.0;
 		}
 
 		this.data.cauldronIngredients = [];
@@ -445,6 +458,14 @@ export class GameSystem extends createSystem({}) {
 		this.data.activePowerUp = powerUp;
 		this.data.powerUpsUsed++;
 		this.audio.playPowerUp();
+
+		// Screen-wide flash
+		const flashColors: Record<string, number> = {
+			time_freeze: 0x88ccff,
+			double_points: 0xffdd00,
+			extra_life: 0xff4488,
+		};
+		this.env.triggerPowerUpFlash(flashColors[powerUp.type] ?? 0xffdd66);
 
 		if (powerUp.type === 'extra_life') {
 			this.data.lives = Math.min(this.data.lives + 1, 4);
@@ -524,6 +545,30 @@ export class GameSystem extends createSystem({}) {
 		this.orderSpawnInterval = Math.max(3, 8 - this.data.wave * 0.5);
 		this.lastTimerWarn = 0;
 
+		const boss = isBossWave(this.data.wave);
+		this.env.setBossWave(boss);
+
+		if (boss) {
+			// Boss wave intro — 2 second dramatic pause
+			this.bossIntroTimer = 2.0;
+			this.showState('boss_intro');
+			this.audio.playBossHorn();
+			this.env.setBubblesActive(true);
+			this.env.setCauldronColor(0xff2200);
+			this.env.setWaveLevel(this.data.wave);
+			this.env.setComboLevel(0);
+			this.env.setNeededIngredients([]);
+			this.env.triggerWaveTransition();
+			this.audio.setWaveLayer(this.data.wave);
+			this.updateHUD();
+			// Show boss indicator on HUD
+			const hudPanel = this.getPanel('hud-panel');
+			if (hudPanel) {
+				hudPanel.getElementById('difficulty')?.setProperties({ text: '⚔ BOSS WAVE ⚔' });
+			}
+			return;
+		}
+
 		this.showState('playing');
 		this.env.setBubblesActive(true);
 		this.env.setCauldronColor(0x8844cc);
@@ -533,6 +578,7 @@ export class GameSystem extends createSystem({}) {
 		// Wave transition effect
 		this.env.triggerWaveTransition();
 		this.audio.playWaveTransition();
+		this.audio.setWaveLayer(this.data.wave);
 		this.updateHUD();
 		this.updateOrdersPanel();
 		this.updateCauldronPanel();
@@ -626,6 +672,7 @@ export class GameSystem extends createSystem({}) {
 			const orderEl = panel.getElementById(`order-${i}`);
 			const nameEl = panel.getElementById(`name-${i}`);
 			const timerEl = panel.getElementById(`timer-${i}`);
+			const needsEl = panel.getElementById(`needs-${i}`);
 
 			if (order) {
 				const recipe = getRecipeById(order.recipeId);
@@ -638,14 +685,35 @@ export class GameSystem extends createSystem({}) {
 						text: `${remaining}s${urgent ? ' ⚠' : ''}`,
 					});
 				}
+				// Show remaining ingredients needed
+				if (needsEl) {
+					const remainingNames = getRemainingIngredients(order.recipeId, this.data.cauldronIngredients);
+					if (remainingNames.length > 0 && this.data.cauldronIngredients.length > 0) {
+						needsEl.setProperties({ text: `Need: ${remainingNames.join(', ')}` });
+					} else if (this.data.cauldronIngredients.length === 0) {
+						const allNames = recipe?.ingredients.map((id) => getIngredientById(id)?.name ?? id).join(', ') ?? '';
+						needsEl.setProperties({ text: allNames });
+					} else {
+						needsEl.setProperties({ text: '' });
+					}
+				}
 			} else {
 				if (orderEl) orderEl.setProperties({ display: 'none' });
+				if (needsEl) needsEl.setProperties({ text: '' });
 			}
 		}
 
 		const emptyMsg = panel.getElementById('empty-msg');
 		if (emptyMsg) {
 			emptyMsg.setProperties({ display: this.data.orders.length === 0 ? 'flex' : 'none' });
+		}
+
+		// Boss wave label
+		const bossEl = panel.getElementById('boss-label');
+		if (bossEl) {
+			bossEl.setProperties({
+				text: isBossWave(this.data.wave) ? '⚔ BOSS WAVE ⚔' : '',
+			});
 		}
 	}
 
@@ -716,6 +784,20 @@ export class GameSystem extends createSystem({}) {
 	}
 
 	update(delta: number, _time: number) {
+		if (this.data.state === 'boss_intro') {
+			this.bossIntroTimer -= delta;
+			this.updateCameraShake(delta);
+			if (this.bossIntroTimer <= 0) {
+				// Boss intro done — start playing
+				this.showState('playing');
+				this.env.setCauldronColor(0x8844cc);
+				this.updateOrdersPanel();
+				this.updateCauldronPanel();
+				this.spawnOrder();
+			}
+			return;
+		}
+
 		if (this.data.state !== 'playing') {
 			// Still process camera shake when not playing
 			this.updateCameraShake(delta);
@@ -770,6 +852,15 @@ export class GameSystem extends createSystem({}) {
 
 		// Camera shake
 		this.updateCameraShake(delta);
+
+		// Auto-clear cauldron after failed brew
+		if (this.autoClearTimer > 0) {
+			this.autoClearTimer -= delta;
+			if (this.autoClearTimer <= 0) {
+				this.clearCauldron();
+				this.autoClearTimer = 0;
+			}
+		}
 
 		// Cauldron panel flash feedback
 		if (this.cauldronFlashTimer > 0) {

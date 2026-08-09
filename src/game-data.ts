@@ -129,7 +129,39 @@ export const RECIPES: PotionRecipe[] = [
 	},
 ];
 
-export type GameState = 'menu' | 'playing' | 'wave_complete' | 'game_over' | 'recipes';
+// Boss-only rare recipes — appear exclusively during boss waves (every 5th wave)
+export const BOSS_RECIPES: PotionRecipe[] = [
+	{
+		id: 'dragonblood',
+		name: "Dragon's Blood",
+		ingredients: ['scale', 'feather', 'sun'],
+		color: 0xff2200,
+		glowColor: 0xff5533,
+		points: 350,
+	},
+	{
+		id: 'cosmicnova',
+		name: 'Cosmic Nova',
+		ingredients: ['void', 'sun', 'frost'],
+		color: 0xdd88ff,
+		glowColor: 0xeeaaff,
+		points: 400,
+	},
+];
+
+export function isBossWave(wave: number): boolean {
+	return wave > 0 && wave % 5 === 0;
+}
+
+export function getAllRecipesForWave(wave: number): PotionRecipe[] {
+	const base = wave >= 4 ? RECIPES : wave >= 2 ? RECIPES.slice(0, 7) : RECIPES.slice(0, 4);
+	if (isBossWave(wave)) {
+		return [...base, ...BOSS_RECIPES];
+	}
+	return base;
+}
+
+export type GameState = 'menu' | 'playing' | 'wave_complete' | 'game_over' | 'recipes' | 'boss_intro';
 
 export type PowerUpType = 'time_freeze' | 'double_points' | 'extra_life';
 
@@ -199,7 +231,7 @@ export function createInitialGameData(): GameData {
 
 export function findMatchingRecipe(ingredients: string[]): PotionRecipe | null {
 	const sorted = [...ingredients].sort();
-	for (const recipe of RECIPES) {
+	for (const recipe of [...RECIPES, ...BOSS_RECIPES]) {
 		const recipeSorted = [...recipe.ingredients].sort();
 		if (recipeSorted.length === sorted.length && recipeSorted.every((v, i) => v === sorted[i])) {
 			return recipe;
@@ -213,7 +245,42 @@ export function getIngredientById(id: string): Ingredient | undefined {
 }
 
 export function getRecipeById(id: string): PotionRecipe | undefined {
-	return RECIPES.find((r) => r.id === id);
+	return RECIPES.find((r) => r.id === id) ?? BOSS_RECIPES.find((r) => r.id === id);
+}
+
+/**
+ * Get names of ingredients still needed for a recipe, accounting for what's already in the cauldron.
+ */
+export function getRemainingIngredients(recipeId: string, cauldronIngredients: string[]): string[] {
+	const recipe = getRecipeById(recipeId);
+	if (!recipe) return [];
+	const remaining = [...recipe.ingredients];
+	for (const ing of cauldronIngredients) {
+		const idx = remaining.indexOf(ing);
+		if (idx !== -1) remaining.splice(idx, 1);
+	}
+	return remaining.map((id) => getIngredientById(id)?.name ?? id);
+}
+
+/**
+ * Blend multiple ingredient colors together (additive mixing, clamped).
+ */
+export function blendIngredientColors(ingredientIds: string[]): number {
+	if (ingredientIds.length === 0) return 0x8844cc;
+	let r = 0, g = 0, b = 0;
+	for (const id of ingredientIds) {
+		const ing = getIngredientById(id);
+		if (ing) {
+			r += (ing.color >> 16) & 0xff;
+			g += (ing.color >> 8) & 0xff;
+			b += ing.color & 0xff;
+		}
+	}
+	const n = ingredientIds.length;
+	r = Math.min(255, Math.floor(r / n));
+	g = Math.min(255, Math.floor(g / n));
+	b = Math.min(255, Math.floor(b / n));
+	return (r << 16) | (g << 8) | b;
 }
 
 /**
@@ -225,7 +292,7 @@ export function findPartialRecipeHints(currentIngredients: string[]): string[] {
 	const sorted = [...currentIngredients].sort();
 
 	const hints: string[] = [];
-	for (const recipe of RECIPES) {
+	for (const recipe of [...RECIPES, ...BOSS_RECIPES]) {
 		const recipeSorted = [...recipe.ingredients].sort();
 		// Check if currentIngredients is a subset of recipe ingredients
 		let isSubset = true;

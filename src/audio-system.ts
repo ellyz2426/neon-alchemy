@@ -1,11 +1,30 @@
 import { createSystem } from '@iwsdk/core';
 
+// Base frequencies for each ingredient — gives each a distinct pitch character
+const INGREDIENT_PITCHES: Record<string, number> = {
+	herb: 392,     // G4
+	crystal: 440,  // A4
+	mushroom: 330, // E4
+	essence: 494,  // B4
+	scale: 294,    // D4
+	fang: 262,     // C4
+	feather: 523,  // C5
+	pearl: 587,    // D5
+	void: 220,     // A3 (low, ominous)
+	frost: 659,    // E5
+	sun: 698,      // F5
+};
+
 export class AudioSystem extends createSystem({}) {
 	private audioCtx: AudioContext | null = null;
 	private masterGain: GainNode | null = null;
 	private ambientOsc: OscillatorNode | null = null;
 	private ambientGain: GainNode | null = null;
 	private initialized = false;
+
+	// Wave-progressive ambient layers
+	private ambientLayers: { osc: OscillatorNode; gain: GainNode }[] = [];
+	private currentWaveLayer = 0;
 
 	init() {
 		// Audio context created on first user interaction
@@ -47,6 +66,39 @@ export class AudioSystem extends createSystem({}) {
 		osc2.connect(g2);
 		g2.connect(this.masterGain);
 		osc2.start();
+
+		// Pre-create wave-progressive layers (initially silent)
+		const layerFreqs = [130, 196, 262, 330, 392]; // C3, G3, C4, E4, G4
+		for (const freq of layerFreqs) {
+			const layerOsc = this.audioCtx.createOscillator();
+			const layerGain = this.audioCtx.createGain();
+			layerOsc.type = 'sine';
+			layerOsc.frequency.value = freq;
+			layerGain.gain.value = 0; // silent until wave activates
+			layerOsc.connect(layerGain);
+			layerGain.connect(this.masterGain);
+			layerOsc.start();
+			this.ambientLayers.push({ osc: layerOsc, gain: layerGain });
+		}
+		this.currentWaveLayer = 0;
+	}
+
+	/**
+	 * Activate ambient music layers proportional to wave number.
+	 * Each wave adds a new harmonic layer for building intensity.
+	 */
+	setWaveLayer(wave: number) {
+		if (!this.audioCtx) return;
+		const targetLayers = Math.min(wave, this.ambientLayers.length);
+		const now = this.audioCtx.currentTime;
+		for (let i = 0; i < this.ambientLayers.length; i++) {
+			const layer = this.ambientLayers[i];
+			const targetVol = i < targetLayers ? 0.012 + i * 0.003 : 0;
+			layer.gain.gain.cancelScheduledValues(now);
+			layer.gain.gain.setValueAtTime(layer.gain.gain.value, now);
+			layer.gain.gain.linearRampToValueAtTime(targetVol, now + 1.5);
+		}
+		this.currentWaveLayer = targetLayers;
 	}
 
 	stopAmbient() {
@@ -54,16 +106,26 @@ export class AudioSystem extends createSystem({}) {
 			this.ambientOsc.stop();
 			this.ambientOsc = null;
 		}
+		// Stop wave layers
+		for (const layer of this.ambientLayers) {
+			try { layer.osc.stop(); } catch {}
+		}
+		this.ambientLayers = [];
+		this.currentWaveLayer = 0;
 	}
 
-	playIngredientAdd() {
+	/**
+	 * Play an ingredient-specific pickup sound. Each ingredient has a unique pitch.
+	 */
+	playIngredientAdd(ingredientId?: string) {
 		this.ensureAudioCtx();
 		if (!this.audioCtx || !this.masterGain) return;
+		const basePitch = (ingredientId && INGREDIENT_PITCHES[ingredientId]) || 440;
 		const osc = this.audioCtx.createOscillator();
 		const gain = this.audioCtx.createGain();
 		osc.type = 'sine';
-		osc.frequency.setValueAtTime(440, this.audioCtx.currentTime);
-		osc.frequency.exponentialRampToValueAtTime(880, this.audioCtx.currentTime + 0.1);
+		osc.frequency.setValueAtTime(basePitch, this.audioCtx.currentTime);
+		osc.frequency.exponentialRampToValueAtTime(basePitch * 2, this.audioCtx.currentTime + 0.1);
 		gain.gain.setValueAtTime(0.15, this.audioCtx.currentTime);
 		gain.gain.exponentialRampToValueAtTime(0.001, this.audioCtx.currentTime + 0.2);
 		osc.connect(gain);
@@ -271,7 +333,7 @@ export class AudioSystem extends createSystem({}) {
 		this.ensureAudioCtx();
 		if (!this.audioCtx || !this.masterGain) return;
 		const now = this.audioCtx.currentTime;
-		// Bright ascending chime — three quick notes
+		// Bright ascending chime — three quick notes + shimmer tail
 		for (let i = 0; i < 3; i++) {
 			const osc = this.audioCtx.createOscillator();
 			const gain = this.audioCtx.createGain();
@@ -286,6 +348,67 @@ export class AudioSystem extends createSystem({}) {
 			osc.start(start);
 			osc.stop(start + 0.25);
 		}
+		// Shimmer tail
+		const shimmer = this.audioCtx.createOscillator();
+		const shimGain = this.audioCtx.createGain();
+		shimmer.type = 'triangle';
+		shimmer.frequency.setValueAtTime(1200, now + 0.24);
+		shimmer.frequency.exponentialRampToValueAtTime(2400, now + 0.6);
+		shimGain.gain.setValueAtTime(0.06, now + 0.24);
+		shimGain.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+		shimmer.connect(shimGain);
+		shimGain.connect(this.masterGain);
+		shimmer.start(now + 0.24);
+		shimmer.stop(now + 0.8);
+	}
+
+	/**
+	 * Play a boss wave entrance horn — ominous low brass + impact.
+	 */
+	playBossHorn() {
+		this.ensureAudioCtx();
+		if (!this.audioCtx || !this.masterGain) return;
+		const now = this.audioCtx.currentTime;
+		// Low brass-like horn
+		const osc = this.audioCtx.createOscillator();
+		const gain = this.audioCtx.createGain();
+		osc.type = 'sawtooth';
+		osc.frequency.setValueAtTime(110, now);
+		osc.frequency.linearRampToValueAtTime(130, now + 0.6);
+		gain.gain.setValueAtTime(0.0, now);
+		gain.gain.linearRampToValueAtTime(0.12, now + 0.15);
+		gain.gain.setValueAtTime(0.12, now + 0.5);
+		gain.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
+		osc.connect(gain);
+		gain.connect(this.masterGain);
+		osc.start(now);
+		osc.stop(now + 1.2);
+		// Second horn, fifth above
+		const osc2 = this.audioCtx.createOscillator();
+		const gain2 = this.audioCtx.createGain();
+		osc2.type = 'sawtooth';
+		osc2.frequency.setValueAtTime(165, now + 0.2);
+		osc2.frequency.linearRampToValueAtTime(196, now + 0.8);
+		gain2.gain.setValueAtTime(0.0, now + 0.2);
+		gain2.gain.linearRampToValueAtTime(0.08, now + 0.35);
+		gain2.gain.setValueAtTime(0.08, now + 0.7);
+		gain2.gain.exponentialRampToValueAtTime(0.001, now + 1.3);
+		osc2.connect(gain2);
+		gain2.connect(this.masterGain);
+		osc2.start(now + 0.2);
+		osc2.stop(now + 1.3);
+		// Impact hit
+		const impact = this.audioCtx.createOscillator();
+		const impactGain = this.audioCtx.createGain();
+		impact.type = 'sine';
+		impact.frequency.setValueAtTime(80, now + 0.8);
+		impact.frequency.exponentialRampToValueAtTime(30, now + 1.4);
+		impactGain.gain.setValueAtTime(0.15, now + 0.8);
+		impactGain.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
+		impact.connect(impactGain);
+		impactGain.connect(this.masterGain);
+		impact.start(now + 0.8);
+		impact.stop(now + 1.5);
 	}
 
 	update(_delta: number, _time: number) {

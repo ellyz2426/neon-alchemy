@@ -164,6 +164,14 @@ export class EnvironmentSystem extends createSystem({}) {
 	// Cauldron smoke particles
 	private smokeParticles: { mesh: Mesh; baseX: number; speed: number; phase: number }[] = [];
 
+	// Power-up screen flash
+	private powerUpFlashMesh: Mesh | null = null;
+	private powerUpFlashTimer = 0;
+
+	// Boss wave state
+	private isBossWave = false;
+	private bossGlowTimer = 0;
+
 	init() {
 		this.buildWorkshop();
 		this.buildCauldron();
@@ -180,6 +188,7 @@ export class EnvironmentSystem extends createSystem({}) {
 		this.buildCauldronLiquidOverlay();
 		this.buildCauldronSmoke();
 		this.buildFloorMushrooms();
+		this.buildPowerUpFlash();
 	}
 
 	private buildWorkshop() {
@@ -1396,6 +1405,52 @@ export class EnvironmentSystem extends createSystem({}) {
 		return result;
 	}
 
+	/**
+	 * Build a full-screen quad for power-up flash effect.
+	 */
+	private buildPowerUpFlash() {
+		const world = this.world as World;
+		const flashGeo = new PlaneGeometry(20, 20);
+		const flashMat = new MeshStandardMaterial({
+			color: 0xffdd66,
+			emissive: 0xffdd66,
+			emissiveIntensity: 2.0,
+			transparent: true,
+			opacity: 0,
+			depthWrite: false,
+			side: DoubleSide,
+		});
+		this.powerUpFlashMesh = new Mesh(flashGeo, flashMat);
+		this.powerUpFlashMesh.position.set(0, 1.7, -1.5);
+		this.powerUpFlashMesh.renderOrder = 999;
+		world.scene.add(this.powerUpFlashMesh);
+	}
+
+	/**
+	 * Trigger a screen-wide flash when a power-up activates.
+	 */
+	triggerPowerUpFlash(color: number = 0xffdd66) {
+		this.powerUpFlashTimer = 0.4;
+		if (this.powerUpFlashMesh) {
+			const mat = this.powerUpFlashMesh.material as MeshStandardMaterial;
+			mat.color.setHex(color);
+			mat.emissive.setHex(color);
+		}
+	}
+
+	/**
+	 * Set boss wave visual mode — intensifies environment.
+	 */
+	setBossWave(isBoss: boolean) {
+		this.isBossWave = isBoss;
+		this.bossGlowTimer = isBoss ? 3.0 : 0;
+		// Tint ambient light redder during boss waves
+		if (this.ambientLight) {
+			this.ambientLight.color.setHex(isBoss ? 0xff4422 : 0x331166);
+			this.ambientLight.intensity = isBoss ? 0.8 : 0.3;
+		}
+	}
+
 	update(delta: number, time: number) {
 		this.elapsedTime += delta;
 
@@ -1938,6 +1993,33 @@ export class EnvironmentSystem extends createSystem({}) {
 			} else {
 				sMat.opacity = 0;
 			}
+		}
+
+		// Power-up flash
+		if (this.powerUpFlashTimer > 0 && this.powerUpFlashMesh) {
+			this.powerUpFlashTimer -= delta;
+			const mat = this.powerUpFlashMesh.material as MeshStandardMaterial;
+			const progress = Math.max(0, this.powerUpFlashTimer / 0.4);
+			// Quick flash in, slow fade out
+			mat.opacity = progress > 0.7 ? (1 - progress) * 3.3 * 0.35 : progress * 0.35;
+			if (this.powerUpFlashTimer <= 0) {
+				mat.opacity = 0;
+			}
+		}
+
+		// Boss wave ambient pulsing
+		if (this.isBossWave && this.isPlaying) {
+			this.bossGlowTimer += delta;
+			const bossPulse = 0.5 + Math.sin(this.bossGlowTimer * 3.0) * 0.3;
+			if (this.ambientLight) {
+				this.ambientLight.intensity = 0.5 + bossPulse * 0.3;
+			}
+			// Runes glow red during boss waves
+			this.runeSymbols.forEach((rune) => {
+				const rMat = rune.material as MeshStandardMaterial;
+				rMat.emissive.setHex(0xff2200);
+				rMat.emissiveIntensity = 0.5 + bossPulse * 0.5;
+			});
 		}
 	}
 }
